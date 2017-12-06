@@ -11,6 +11,55 @@ import org.spongycastle.util.encoders.Hex
 import scala.annotation.tailrec
 
 object MerklePatriciaTrie {
+  /** The key prefix corresponding to a node that participates in a proof sketch. */
+  type ProofNibbles = Array[Byte]
+
+  /** The cryptographic hash corresponding to a node that participates in a proof sketch. */
+  type ProofHash = Array[Byte]
+
+  final case class ProofStep(nibbles: ProofNibbles, hash: ProofHash) {
+    def nibblesToString: String = nibbles.map { nibble ⇒ Integer.toHexString(nibble) }. mkString
+    def hashToHexString: String = Hex.toHexString(hash)
+    def hashToByteString: ByteString = ByteString(hash)
+
+    private[mpt] def hashToDebugHexString: String = {
+      val hs = hashToHexString
+      hs.substring(0, 4) + "_" + hs.substring(hs.length - 4, hs.length)
+    }
+
+    override def toString: String = productPrefix + s"($nibblesToString, $hashToDebugHexString)"
+  }
+
+  type ProofSketch = List[ProofStep]
+
+  def verifyProofStep(proofStep: ProofStep, node: MptNode): Unit = {
+    val proofHash = proofStep.hash
+    val proofNibbles = proofStep.nibbles
+
+    // 1. Check the hash
+    val realHash = node.hash
+    require(proofHash sameElements realHash)
+
+    // 2. Check the key part (="path")
+    node match {
+      case BranchNode(children, terminatorOpt, _, _) ⇒
+        // By design, in a branch node only one nibble is used for routing
+        require(proofNibbles.length == 1)
+        // FIXME moar please ?
+
+      case node @ ExtensionNode(sharedKey, next, _, _) ⇒
+        require(sameNibblesForSharedKey(node, proofNibbles))
+
+      case node @ LeafNode(key, value, _, _) ⇒
+        require(sameNibblesForKey(node, proofNibbles))
+    }
+  }
+
+  def sameNibblesForKey(leafNode: LeafNode, nibbles: Array[Byte]): Boolean =
+    leafNode.key.toArray[Byte] sameElements nibbles
+
+  def sameNibblesForSharedKey(extensionNode: ExtensionNode, nibbles: Array[Byte]): Boolean =
+    extensionNode.sharedKey.toArray[Byte] sameElements nibbles
 
   case class MPTException(message: String) extends RuntimeException(message)
 
@@ -139,6 +188,7 @@ object MerklePatriciaTrie {
 
 trait NodesKeyValueStorage extends SimpleMap[NodeHash, NodeEncoded, NodesKeyValueStorage]
 
+//noinspection ScalaStyle
 class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]],
   val nodeStorage: NodesKeyValueStorage)
   (implicit kSerializer: ByteArrayEncoder[K], vSerializer: ByteArraySerializable[V])
@@ -240,6 +290,120 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
     val afterRemoval = toRemove.foldLeft(this) { (acc, key) => acc - key }
     toUpsert.foldLeft(afterRemoval) { (acc, item) => acc + item }
   }
+
+  /**
+   * Provides some proof sketch that the given `key` exists in the MPT, in the form of a path from the root
+   * node to the node corresponding to the given `key`.
+   * We assume of course that the root hash is known.
+   * <p/>
+   * A proof sketch is made of [[io.iohk.ethereum.mpt.MerklePatriciaTrie.ProofStep ProofSteps]],
+   * each of which provides information that we can use in verifying the proof.
+   * <p/>
+   * If the proof sketch contains at least the root node (first [[io.iohk.ethereum.mpt.MerklePatriciaTrie.ProofStep ProofStep]])
+   * and the node that corresponds to the given `key` (last `ProofStep`), then by definition the proof
+   * sketch is fully constructed.
+   * In such a case we can easily verify that the key exists in the MPT. Otherwise, we do not know for sure.
+   * <p/>
+   * We return `None` if there is no root hash for this MPT.
+   */
+  def prove(key: K): Option[ProofSketch] = {
+    for {
+      theRootHash ← rootHash
+    } yield {
+      val keyNibbles = key2nibbles(key)
+      val rootNode = getRootNode(theRootHash, nodeStorage)
+
+      @tailrec
+      def walk(currentNode: MptNode, currentNibbles: Array[Byte], currentProofItems: List[ProofStep]): List[ProofStep] = {
+        currentNode match {
+          case leafNode: LeafNode ⇒
+            if(sameNibblesForKey(leafNode, currentNibbles)) {
+              // end of chain, we got the key, return the full path.
+              val proofHash = leafNode.hash
+              val proofNibbles = currentNibbles
+              val proofStep = ProofStep(proofNibbles, proofHash)
+              val nextProofItems = proofStep :: currentProofItems
+
+              println(s"PROVE Leaf(key = ${proofStep.nibblesToString}, value = ${leafNode.value.map(_.toChar).mkString})")
+
+              nextProofItems
+            }
+            else {
+              // the key was not found, just return our path so far
+              currentProofItems
+            }
+
+          case extensionNode @ ExtensionNode(sharedKey, _, _, _) ⇒
+            if(currentNibbles.length >= sharedKey.length) {
+              val (nibblesPrefix, nibblesSuffix) = currentNibbles.splitAt(sharedKey.length)
+
+              if(sameNibblesForSharedKey(extensionNode, nibblesPrefix)) {
+                // decode the `next` node
+                val nextNode = getNextNode(extensionNode, nodeStorage)
+                val nextNibbles = nibblesSuffix
+
+                val proofHash = extensionNode.hash
+                val proofNibbles = nibblesPrefix
+                val proofItem = ProofStep(proofNibbles, proofHash)
+                val nextProofItems= proofItem :: currentProofItems
+
+                walk(nextNode, nextNibbles, nextProofItems)
+              }
+              else {
+                // the key was not found, just return our path so far
+                currentProofItems
+              }
+            }
+            else {
+              // the key was not found, just return our path so far
+              currentProofItems
+            }
+
+          case branchNode: BranchNode ⇒
+            if(currentNibbles.length == 0) {
+              // We have a branch node and no (remaining) key to compare ...
+              // so probably that's it ....
+              // FIXME check "probably" above
+              currentProofItems
+            }
+            else {
+              // Use the first nibble to find the next (child) node
+              val index = currentNibbles(0)
+              val childNodeOpt = getChild(branchNode, index, nodeStorage)
+              childNodeOpt match {
+                case None ⇒
+                  // Not found ...
+                  currentProofItems
+
+                case Some(nextNode) ⇒
+                  val nextNibbles = currentNibbles.drop(1)
+
+                  val proofHash = branchNode.hash
+                  val proofNibbles = Array(index)
+                  val proofItem = ProofStep(proofNibbles, proofHash)
+                  val nextProofItems = proofItem :: currentProofItems
+
+                  walk(nextNode, nextNibbles, nextProofItems)
+              }
+            }
+        }
+      }
+
+      // Walk from root to the node of the given key and record all intermediate node hashes
+      // in a list.
+      // The sequence (=list) will end with the given key as a first element iff the key exists.
+      walk(rootNode, keyNibbles, Nil).reverse
+    }
+  }
+
+  /** Serializes a key to a byte array. */
+  private[this] def key2bytes(key: K): Array[Byte] = kSerializer.toBytes(key)
+
+  /**
+   * Transforms a key to a nibbles byte array, using
+   * [[io.iohk.ethereum.mpt.HexPrefix#bytesToNibbles(byte[]) bytesToNibbles]].
+   */
+  private[this] def key2nibbles(key: K): Array[Byte] = HexPrefix.bytesToNibbles(key2bytes(key))
 
   @tailrec
   private def get(node: MptNode, searchKey: Array[Byte]): Option[Array[Byte]] = node match {
