@@ -392,7 +392,6 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
 
       // Walk from root to the node of the given key and record all intermediate node hashes
       // in a list.
-      // The sequence (=list) will end with the given key as a first element iff the key exists.
       walk(rootNode, keyNibbles, Nil).reverse
     }
   }
