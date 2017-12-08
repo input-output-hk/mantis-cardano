@@ -32,6 +32,7 @@ object MerklePatriciaTrie {
 
   type ProofSketch = List[ProofStep]
 
+  // Very lightweight verification, just to bootstrap testing
   def verifyProofStep(proofStep: ProofStep, node: MptNode): Unit = {
     val proofHash = proofStep.hash
     val proofNibbles = proofStep.nibbles
