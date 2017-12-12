@@ -1,11 +1,9 @@
 package io.iohk.ethereum.mpt
 
-import java.nio.ByteBuffer
-
 import akka.util.ByteString
 import io.iohk.ethereum.db.dataSource.EphemDataSource
 import io.iohk.ethereum.db.storage.{ArchiveNodeStorage, NodeStorage}
-import io.iohk.ethereum.mpt.MerklePatriciaTrie.{ProofStep, defaultByteArraySerializable, nodeDec}
+import io.iohk.ethereum.mpt.MerklePatriciaTrie.{ProofSketch, defaultByteArraySerializable, nodeDec}
 import io.iohk.ethereum.{ObjectGenerators, rlp}
 import org.scalatest.FunSuite
 import org.scalatest.prop.PropertyChecks
@@ -24,29 +22,20 @@ object Helpers {
 
     def toHexString: String = Hex.toHexString(a)
 
+    def nibblesToString: String = a.map { nibble ⇒ Integer.toHexString(nibble) }. mkString
+
+
     private[mpt] def toDebugHexString: String = {
       val hs = toHexString
-      hs.substring(0, 4) + "_" + hs.substring(hs.length - 4, hs.length)
+      hs.substring(0, 4) + "_" + hs.substring(hs.length - 4, hs.length) + s"_[${hs.length}]"
     }
   }
 
 }
 //noinspection ScalaStyle
-class MerklePatriciaTrieProofSuite extends FunSuite
-  with PropertyChecks
-  with ObjectGenerators {
+class MerklePatriciaTrieProofSuite extends FunSuite with PropertyChecks with ObjectGenerators {
 
   import Helpers._
-
-  implicit val intByteArraySerializable = new ByteArraySerializable[Int] {
-    override def toBytes(input: Int): Array[Byte] = {
-      val b: ByteBuffer = ByteBuffer.allocate(4)
-      b.putInt(input)
-      b.array
-    }
-
-    override def fromBytes(bytes: Array[Byte]): Int = ByteBuffer.wrap(bytes).getInt()
-  }
 
   val Key_000001 = "000001"
   val Key_000002 = "000002"
@@ -103,7 +92,7 @@ class MerklePatriciaTrieProofSuite extends FunSuite
 
   def mptFind(key: String): Option[String] = mpt.get(key.toHexBytes).map(s ⇒ new String(s, "UTF-8"))
   def mptGet(key: String): String = mptFind(key).get
-  def mptProve(key: String): Seq[ProofStep] = mpt.prove(key.toHexBytes).getOrElse(Seq())
+  def mptProve(key: String): ProofSketch = mpt.prove(key.toHexBytes).getOrElse(ProofSketch(Array(), List()))
 
   def nodeEncoded2Node(bytes: NodeStorage.NodeEncoded): MptNode = rlp.decode[MptNode](bytes)
   def dbFind(hash: ByteString): Option[MptNode] = db.get(hash).map(bytes ⇒ nodeEncoded2Node(bytes))
@@ -120,38 +109,49 @@ class MerklePatriciaTrieProofSuite extends FunSuite
 
     // Now, first hash is the hash of the node we got the key for
     // and  last  hash is the root hash
-    val proofSteps = mptProve(Key_1012F0)
-    for {
-      (proofStep, index) ← proofSteps.zipWithIndex
-    } {
-      val hash = proofStep.hashToDebugHexString
-      val snibbles = proofStep.nibblesToString
-      println(s"$index. $snibbles - $hash")
-    }
-    val proofStepRoot = proofSteps.head
+    val proofSketch = mptProve(Key_1012F0)
+    val proofVerified = mpt.verify(proofSketch)
 
-    // Verify that the root returned is the well known root
-    assert(proofStepRoot.hash sameElements rootHash)
+    assert(proofVerified, "proof proofVerified")
 
-    // Now verify each proof step by descending from the root to the last node
-    @tailrec
-    def verify(proofSteps: Iterator[ProofStep]): Unit = {
-      if(proofSteps.hasNext) {
-        val proofStep = proofSteps.next()
-        println(s"Checking $proofStep")
-        val hashByteString = proofStep.hashToByteString
-
-        // Use the hash in the proof to get the node from storage.
-        // Note that it is RLP-encoded, so we must decode it.
-        val nodeOpt = db.get(hashByteString).map(nodeEncoded2Node)
-        val node = nodeOpt.get // verification will fail on exception
-        MerklePatriciaTrie.verifyProofStep(proofStep, node)
-
-        verify(proofSteps)
-      }
-    }
-
-    // FIXME: It fails in the last step.
-    verify(proofSteps.iterator)
+//    val proofSteps = proofSketch.steps
+//    for {
+//      (proofStep, index) ← proofSteps.zipWithIndex
+//    } {
+//      val hash = proofStep.hashToDebugHexString
+//      val snibbles = proofStep.nibblesToString
+//      println(s"$index. $snibbles - $hash")
+//    }
+//    val proofStepRoot = proofSteps.head
+//
+//    // Verify that the root returned is the well known root
+//    assert(proofStepRoot.hash sameElements rootHash)
+//
+//    // Now verify each proof step by descending from the root to the last node
+//    @tailrec
+//    def verify(proofSteps: Iterator[ProofStep]): Unit = {
+//      if(proofSteps.hasNext) {
+//        val proofStep = proofSteps.next()
+//        print(s"Checking $proofStep")
+//        val hashByteString = proofStep.hashToByteString
+//
+//        // Use the hash in the proof to get the node from storage.
+//        // Note that it is RLP-encoded, so we must decode it.
+//        val dbResult = db.get(hashByteString)
+//        dbResult match {
+//          case None ⇒
+//            assert(false, s"Could not locate node for $proofStep")
+//
+//          case Some(nodeEncoded) ⇒
+//            val node = nodeEncoded2Node(nodeEncoded)
+//            MerklePatriciaTrie.verifyProofStep(proofStep, node)
+//            println("  OK")
+//            verify(proofSteps)
+//        }
+//      }
+//    }
+//
+//    // FIXME: It fails in the last step.
+//    verify(proofSteps.iterator)
   }
 }
