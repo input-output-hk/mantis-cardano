@@ -1,38 +1,21 @@
 package io.iohk.ethereum.mpt
 
-import akka.util.ByteString
+import io.iohk.ethereum.ObjectGenerators
 import io.iohk.ethereum.db.dataSource.EphemDataSource
 import io.iohk.ethereum.db.storage.{ArchiveNodeStorage, NodeStorage}
-import io.iohk.ethereum.mpt.MerklePatriciaTrie.{ProofSketch, defaultByteArraySerializable, nodeDec}
-import io.iohk.ethereum.{ObjectGenerators, rlp}
+import io.iohk.ethereum.mpt.MerklePatriciaTrie.{ProofSketch, defaultByteArraySerializable}
 import org.scalatest.FunSuite
 import org.scalatest.prop.PropertyChecks
 import org.spongycastle.util.encoders.Hex
 
 import scala.annotation.tailrec
 
-
 object Helpers {
   implicit class String2Hex(val s: String) extends AnyVal {
     def toHexBytes: Array[Byte] = Hex.decode(s)
   }
-
-  implicit class ByteArray2ByteString(val a: Array[Byte]) extends AnyVal {
-    def toByteString: ByteString = ByteString(a)
-
-    def toHexString: String = Hex.toHexString(a)
-
-    def nibblesToString: String = a.map { nibble ⇒ Integer.toHexString(nibble) }. mkString
-
-
-    private[mpt] def toDebugHexString: String = {
-      val hs = toHexString
-      hs.substring(0, 4) + "_" + hs.substring(hs.length - 4, hs.length) + s"_[${hs.length}]"
-    }
-  }
-
 }
-//noinspection ScalaStyle
+
 class MerklePatriciaTrieProofSuite extends FunSuite with PropertyChecks with ObjectGenerators {
 
   import Helpers._
@@ -71,10 +54,6 @@ class MerklePatriciaTrieProofSuite extends FunSuite with PropertyChecks with Obj
       val decodedKey = Hex.decode(key)
 
       val newMpt = mpt.put(decodedKey, value.getBytes("UTF-8"))
-
-      val newRootHash = newMpt.getRootHash
-      val targetNode = mpt.get(decodedKey)
-      println(s"Added $key -> $value, new rootHash = ${newRootHash.toDebugHexString}")
       addAll(newMpt, items)
     }
     else {
@@ -82,76 +61,31 @@ class MerklePatriciaTrieProofSuite extends FunSuite with PropertyChecks with Obj
     }
 
   val db = new ArchiveNodeStorage(new NodeStorage(EphemDataSource()))
-  val emptyMpt = MerklePatriciaTrie[Array[Byte], Array[Byte]](db)
-  val initialRootHash = emptyMpt.getRootHash
-  println(s"initialRootHash = ${initialRootHash.toDebugHexString}")
-  val mpt = addAll(emptyMpt, data.iterator)
-  val rootHash = mpt.getRootHash
-  println()
-  println(s"rootHash = ${rootHash.toDebugHexString}")
+  val emptyMpt: MerklePatriciaTrie[Array[Byte], Array[Byte]] = MerklePatriciaTrie[Array[Byte], Array[Byte]](db)
+  val mpt: MPT = addAll(emptyMpt, data.iterator)
+  val rootHash: Array[Byte] = mpt.getRootHash
 
   def mptFind(key: String): Option[String] = mpt.get(key.toHexBytes).map(s ⇒ new String(s, "UTF-8"))
   def mptGet(key: String): String = mptFind(key).get
   def mptProve(key: String): ProofSketch = mpt.prove(key.toHexBytes).getOrElse(ProofSketch(Array(), List()))
-
-  def nodeEncoded2Node(bytes: NodeStorage.NodeEncoded): MptNode = rlp.decode[MptNode](bytes)
-  def dbFind(hash: ByteString): Option[MptNode] = db.get(hash).map(bytes ⇒ nodeEncoded2Node(bytes))
-  def dbGet(hash: ByteString): MptNode = dbFind(hash).get
-  def dbFind(hash: Array[Byte]): Option[MptNode] = dbFind(ByteString(hash))
-  def dbGet(hash: Array[Byte]): MptNode = dbGet(ByteString(hash))
-
+  def mptVerify(proof: ProofSketch): Boolean = mpt.verify(proof)
 
   test("Proof that key exists") {
-    // key to prove existence for
-    val key = Key_1012F0 // TODO: randomize
-    val value = mptGet(key)
-    assert(value == data(key))
+    // All keys in `data` are hand-crafted.
+    // This is the initial key used in order to implement/debug the prove() and verify() methods in the MPT.
+    val key = Key_1012F0
 
-    // Now, first hash is the hash of the node we got the key for
-    // and  last  hash is the root hash
-    val proofSketch = mptProve(Key_1012F0)
-    val proofVerified = mpt.verify(proofSketch)
+    for {
+      // TODO: fully randomize the keys
+      key ← data.keys
+    } {
+      val value = mptGet(key)
+      assert(value == data(key))
 
-    assert(proofVerified, "proof proofVerified")
+      val proof = mptProve(Key_1012F0)
+      val proofVerified = mptVerify(proof)
 
-//    val proofSteps = proofSketch.steps
-//    for {
-//      (proofStep, index) ← proofSteps.zipWithIndex
-//    } {
-//      val hash = proofStep.hashToDebugHexString
-//      val snibbles = proofStep.nibblesToString
-//      println(s"$index. $snibbles - $hash")
-//    }
-//    val proofStepRoot = proofSteps.head
-//
-//    // Verify that the root returned is the well known root
-//    assert(proofStepRoot.hash sameElements rootHash)
-//
-//    // Now verify each proof step by descending from the root to the last node
-//    @tailrec
-//    def verify(proofSteps: Iterator[ProofStep]): Unit = {
-//      if(proofSteps.hasNext) {
-//        val proofStep = proofSteps.next()
-//        print(s"Checking $proofStep")
-//        val hashByteString = proofStep.hashToByteString
-//
-//        // Use the hash in the proof to get the node from storage.
-//        // Note that it is RLP-encoded, so we must decode it.
-//        val dbResult = db.get(hashByteString)
-//        dbResult match {
-//          case None ⇒
-//            assert(false, s"Could not locate node for $proofStep")
-//
-//          case Some(nodeEncoded) ⇒
-//            val node = nodeEncoded2Node(nodeEncoded)
-//            MerklePatriciaTrie.verifyProofStep(proofStep, node)
-//            println("  OK")
-//            verify(proofSteps)
-//        }
-//      }
-//    }
-//
-//    // FIXME: It fails in the last step.
-//    verify(proofSteps.iterator)
+      assert(proofVerified)
+    }
   }
 }

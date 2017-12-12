@@ -66,28 +66,28 @@ object MerklePatriciaTrie {
   }
 
   // Very lightweight verification, just to bootstrap testing
-  def verifyProofStep(proofStep: ProofStep, node: MptNode): Unit = {
-    val proofHash = proofStep.hash
-    val proofNibbles = proofStep.nibbles
-
-    // 1. Check the hash
-    val realHash = node.hash
-    require(proofHash sameElements realHash)
-
-    // 2. Check the key part (="path")
-    node match {
-      case BranchNode(children, terminatorOpt, _, _) ⇒
-        // By design, in a branch node only one nibble is used for routing
-        require(proofNibbles.length == 1)
-        // FIXME moar please ?
-
-      case node @ ExtensionNode(sharedKey, next, _, _) ⇒
-        require(sameNibblesForSharedKey(node, proofNibbles))
-
-      case node @ LeafNode(key, value, _, _) ⇒
-        require(sameNibblesForKey(node, proofNibbles))
-    }
-  }
+//  def verifyProofStep(proofStep: ProofStep, node: MptNode): Unit = {
+//    val proofHash = proofStep.hash
+//    val proofNibbles = proofStep.nibbles
+//
+//    // 1. Check the hash
+//    val realHash = node.hash
+//    require(proofHash sameElements realHash)
+//
+//    // 2. Check the key part (="path")
+//    node match {
+//      case BranchNode(children, terminatorOpt, _, _) ⇒
+//        // By design, in a branch node only one nibble is used for routing
+//        require(proofNibbles.length == 1)
+//        // FIXME moar please ?
+//
+//      case node @ ExtensionNode(sharedKey, next, _, _) ⇒
+//        require(sameNibblesForSharedKey(node, proofNibbles))
+//
+//      case node @ LeafNode(key, value, _, _) ⇒
+//        require(sameNibblesForKey(node, proofNibbles))
+//    }
+//  }
 
   def sameNibblesForKey(leafNode: LeafNode, nibbles: Array[Byte]): Boolean =
     leafNode.key.toArray[Byte] sameElements nibbles
@@ -344,8 +344,6 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
    * We return `None` if there is no root hash for this MPT.
    */
   def prove(key: K): Option[ProofSketch] = {
-    def nodeEncoded2Node(bytes: NodeStorage.NodeEncoded): MptNode = rlp.decode[MptNode](bytes)
-
     for {
       theRootHash ← rootHash
     } yield {
@@ -367,19 +365,6 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
 
               val debugHash = leafNode.hash.toDebugHexString
               println(s"  =>  PROOF STEP $debugHash Leaf([${proofStep.nibblesToString}], '${leafNode.value.map(_.toChar).mkString}')")
-              println(s"      ======================")
-              val hashAsByteString = proofHash.toByteString
-              val capped = leafNode.capped
-              val dbResult = nodeStorage.get(hashAsByteString).map(nodeEncoded2Node).map(_.toDebugString)
-              val dbResultCapped = nodeStorage.get(capped).map(nodeEncoded2Node).map(_.toDebugString)
-              println(s"      hash.length = ${proofHash.length}")
-              println(s"      encoded.length = ${currentNode.encode.length}")
-              println(s"      capped.length = ${capped.length}")
-              println(s"      capped_eq_hash = ${capped == hashAsByteString}")
-              println(s"      dbResult = $dbResult")
-              println(s"      dbResultCapped = $dbResultCapped")
-              println(s"      ======================")
-              println(s"END OF PROOF - SUCCESS")
 
               nextProofItems
             }
@@ -405,18 +390,6 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
                 val debugHash = extensionNode.hash.toDebugHexString
                 println(s"  =>  PROOF STEP $debugHash Ext([${proofNibbles.nibblesToString}])")
                 println(s"      next  node = ${nextNode.hash.toDebugHexString}")
-                println(s"      ======================")
-                val hashAsByteString = proofHash.toByteString
-                val capped = extensionNode.capped
-                val dbResult = nodeStorage.get(hashAsByteString).map(nodeEncoded2Node).map(_.toDebugString)
-                val dbResultCapped = nodeStorage.get(capped).map(nodeEncoded2Node).map(_.toDebugString)
-                println(s"      hash.length = ${proofHash.length}")
-                println(s"      encoded.length = ${currentNode.encode.length}")
-                println(s"      capped.length = ${capped.length}")
-                println(s"      capped_eq_hash = ${capped == hashAsByteString}")
-                println(s"      dbResult = $dbResult")
-                println(s"      dbResultCapped = $dbResultCapped")
-                println(s"      ======================")
 
                 walk(nextNode, nextNibbles, nextProofItems)
               }
@@ -464,18 +437,6 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
                   val debugHash = branchNode.hash.toDebugHexString
                   println(s"  =>  PROOF STEP $debugHash Branch($nibbleString)")
                   println(s"      child node = ${nextNode.hash.toDebugHexString}")
-                  println(s"      ======================")
-                  val hashAsByteString = proofHash.toByteString
-                  val capped = branchNode.capped
-                  val dbResult = nodeStorage.get(hashAsByteString).map(nodeEncoded2Node).map(_.toDebugString)
-                  val dbResultCapped = nodeStorage.get(capped).map(nodeEncoded2Node).map(_.toDebugString)
-                  println(s"      hash.length = ${proofHash.length}")
-                  println(s"      encoded.length = ${currentNode.encode.length}")
-                  println(s"      capped.length = ${capped.length}")
-                  println(s"      capped_eq_hash = ${capped == hashAsByteString}")
-                  println(s"      dbResult = $dbResult")
-                  println(s"      dbResultCapped = $dbResultCapped")
-                  println(s"      ======================")
 
                   walk(nextNode, nextNibbles, nextProofItems)
               }
@@ -493,25 +454,31 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
   protected def rlpDecodeNode(bytes: NodeStorage.NodeEncoded): MptNode = rlp.decode[MptNode](bytes)
 
   protected def findNode(
-    parentNodeHashOpt: Option[ProofHash],
-    nodeHash: ProofHash,
-    currentNibbles: ProofStepNibbles // only needed for a BranchNode
+    parentStepOpt: Option[ProofStep],
+    currentStep: ProofStep
   ): Option[MptNode] = {
+    val parentInfo = parentStepOpt.map(_.hashToDebugHexString)
+    val currentInfo = currentStep.hashToDebugHexString
+    val nibblesInfo = currentStep.nibblesToString
+    println(s"findNode($parentInfo, $currentInfo, [$nibblesInfo])")
+
+    val currentHash = currentStep.hashToByteString
     // 1. Try find the node directly in the storage, based on its hash
-    nodeStorage.get(nodeHash.toByteString) match {
+    nodeStorage.get(currentHash) match {
       case Some(rlpEncodedNode) ⇒
         val node = rlpDecodeNode(rlpEncodedNode)
         Some(node)
 
       case None ⇒
-        parentNodeHashOpt match {
+        parentStepOpt match {
           case None ⇒
             // Too bad, no parent to help us
             None
 
-          case Some(parentNodeHash) ⇒
+          case Some(parentStep) ⇒
+            val parentHash = parentStep.hashToByteString
             // 2. It must be stored in the parent node, if its size is small
-            nodeStorage.get(parentNodeHash.toByteString) match {
+            nodeStorage.get(parentHash) match {
               case None ⇒
                 None // too bad, not even the parent node there!
 
@@ -524,20 +491,19 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
                     None
 
                   case node: BranchNode ⇒
-                    println(s"_ on ${node.toDebugString}, currentNibbles = ${currentNibbles.toHexString}")
-                    assert(currentNibbles.length == 1)
-                    val index = currentNibbles(0)
+                    val nibblesToCheck = parentStep.nibbles
+                    assert(nibblesToCheck.length == 1)
+                    val index = nibblesToCheck(0)
                     node.children(index) match {
                       case None ⇒
                         // Too bad, no child in that position!
                         None
                       case Some(Left(childNodeHash)) ⇒
                         // Too bad! In that position a child is represented by a hash
-                        // but in such a case we should have found the child in the storage
-                        // directly in the first place !
+                        // but in such a case we should have found the child in the storage !
                         None
                       case Some(Right(mptNode)) ⇒
-                        if(sameHashForProof(mptNode, nodeHash)) {
+                        if(sameHashForProof(mptNode, currentStep.hash)) {
                           Some(mptNode)
                         }
                         else {
@@ -554,7 +520,7 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
                         None
 
                       case Right(mptNode) ⇒
-                        if(sameHashForProof(mptNode, nodeHash)) {
+                        if(sameHashForProof(mptNode, currentStep.hash)) {
                           Some(mptNode)
                         }
                         else {
@@ -566,14 +532,6 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
             }
         }
     }
-  }
-
-  protected def findNode(
-    parentNodeHash: ProofHash,
-    nodeHash: ProofHash,
-    currentNibbles: ProofStepNibbles // only needed for a BranchNode
-  ): Option[MptNode] = {
-    findNode(Some(parentNodeHash), nodeHash, currentNibbles)
   }
 
   /**
@@ -611,12 +569,13 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
 
     @tailrec
     def _verifySteps(parentStepOpt: Option[ProofStep], nodeStep: ProofStep, nextSteps: List[ProofStep]): Boolean = {
-      val nodeOpt = findNode(parentStepOpt.map(_.hash), nodeStep.hash, nodeStep.nibbles)
+      val nodeOpt = findNode(parentStepOpt, nodeStep)
       nodeOpt match {
         case None ⇒
           false
 
         case Some(node) ⇒
+          println(s"  => ${node.toDebugString}")
           if(_verifyStep(nodeStep, node)) {
             nextSteps match {
               case Nil ⇒
@@ -636,12 +595,8 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
       case Nil ⇒
         false // we know nothing since we don't have even a single proof step
 
-      case rootStep :: Nil ⇒
-        _verifySteps(None, rootStep, Nil)
-
-
-      case parentStep :: nodeStep :: nextSteps ⇒
-        _verifySteps(Some(parentStep), nodeStep, nextSteps)
+      case rootStep :: nextSteps ⇒
+        _verifySteps(None, rootStep, nextSteps)
     }
   }
 
