@@ -4,13 +4,11 @@ import akka.util.ByteString
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.domain._
-import io.iohk.ethereum.nodebuilder.{BlockchainConfigBuilder, SyncConfigBuilder, ValidatorsBuilder}
 import org.scalatest._
 import io.iohk.ethereum.utils._
 import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.domain.Block.BlockDec
 import io.iohk.ethereum.mpt.MerklePatriciaTrie.MPTException
-import io.iohk.ethereum.vm.VM
 
 class  SimulateTransactionTest extends FlatSpec with Matchers with Logger {
 
@@ -100,11 +98,7 @@ class  SimulateTransactionTest extends FlatSpec with Matchers with Logger {
   }
 }
 
-trait ScenarioSetup
-  extends EphemBlockchainTestSetup
-  with ValidatorsBuilder
-  with SyncConfigBuilder
-  with BlockchainConfigBuilder {
+trait ScenarioSetup extends EphemBlockchainTestSetup {
 
   override lazy val blockchainConfig = new BlockchainConfig{
     override val eip155BlockNumber: BigInt = 0
@@ -125,9 +119,9 @@ trait ScenarioSetup
     val gasTieBreaker: Boolean = false
   }
 
-  val emptyWorld = blockchain.getWorldStateProxy(-1, UInt256.Zero, None)
+  override lazy val ledger: LedgerImpl = newLedger()
 
-  val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, validators)
+  val emptyWorld = blockchain.getWorldStateProxy(-1, UInt256.Zero, None)
 
   val existingAddress = Address(10)
   val existingAccount = Account(nonce = UInt256.Zero, balance = UInt256(10))

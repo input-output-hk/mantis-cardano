@@ -6,7 +6,7 @@ import io.iohk.ethereum.domain.{Account, Address, Block, UInt256}
 import io.iohk.ethereum.ets.common.AccountState
 import io.iohk.ethereum.ledger._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
-import io.iohk.ethereum.nodebuilder.{ActorSystemBuilder, BlockchainConfigBuilder, SyncConfigBuilder, ValidatorsBuilder}
+import io.iohk.ethereum.nodebuilder.{ActorSystemBuilder, LedgerBuilder, SyncConfigBuilder}
 import io.iohk.ethereum.utils.BigIntExtensionMethods._
 import io.iohk.ethereum.utils.BlockchainConfig
 import io.iohk.ethereum.vm.VM
@@ -14,18 +14,17 @@ import org.spongycastle.util.encoders.Hex
 
 import scala.util.{Failure, Success, Try}
 
-abstract class ScenarioSetup(vm: VM, scenario: BlockchainScenario)
+abstract class ScenarioSetup(_vm: VM, scenario: BlockchainScenario)
   extends EphemBlockchainTestSetup
-  with ValidatorsBuilder
   with SyncConfigBuilder
-  with BlockchainConfigBuilder
-  with ActorSystemBuilder {
+  with ActorSystemBuilder
+  with LedgerBuilder {
 
-  val emptyWorld = blockchain.getWorldStateProxy(-1, UInt256.Zero, None)
+  override lazy val vm = _vm
 
   override lazy val blockchainConfig = buildBlockchainConfig(scenario.network)
 
-  val ledger = new LedgerImpl(vm, blockchain, blockchainConfig, syncConfig, validators)
+  val emptyWorld = blockchain.getWorldStateProxy(-1, UInt256.Zero, None)
 
   def loadGenesis(): Block = {
     val genesisBlock = scenario.genesisRLP match {
