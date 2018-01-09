@@ -528,6 +528,7 @@ trait Node extends NodeKeyBuilder
   with ConsensusBuilder
   with ConsensusConfigBuilder
   with RemoteVmBuilder // or LocalVmBuilder
+
 /**
  * A standard node is everything except the consensus algorithm, which is plugged in dynamically.
  */
