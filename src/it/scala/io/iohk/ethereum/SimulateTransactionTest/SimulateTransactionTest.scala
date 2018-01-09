@@ -2,6 +2,7 @@ package io.iohk.ethereum.ledger
 
 import akka.util.ByteString
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
+import io.iohk.ethereum.consensus.ConsensusBuilder
 import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.nodebuilder.{BlockchainConfigBuilder, SyncConfigBuilder, ValidatorsBuilder}
@@ -104,7 +105,9 @@ trait ScenarioSetup
   extends EphemBlockchainTestSetup
   with ValidatorsBuilder
   with SyncConfigBuilder
-  with BlockchainConfigBuilder {
+  with BlockchainConfigBuilder
+  // FIXME What are the semantics after PoW decoupling?
+  with ConsensusBuilder {
 
   override lazy val blockchainConfig = new BlockchainConfig{
     override val eip155BlockNumber: BigInt = 0

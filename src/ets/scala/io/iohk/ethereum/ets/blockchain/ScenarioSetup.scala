@@ -1,6 +1,7 @@
 package io.iohk.ethereum.ets.blockchain
 
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
+import io.iohk.ethereum.consensus.ConsensusBuilder
 import io.iohk.ethereum.domain.Block.BlockDec
 import io.iohk.ethereum.domain.{Account, Address, Block, UInt256}
 import io.iohk.ethereum.ets.common.AccountState
@@ -18,7 +19,9 @@ abstract class ScenarioSetup(scenario: BlockchainScenario)
   extends EphemBlockchainTestSetup
   with ValidatorsBuilder
   with SyncConfigBuilder
-  with BlockchainConfigBuilder {
+  with BlockchainConfigBuilder
+  // FIXME What are the semantics after PoW decoupling?
+  with ConsensusBuilder {
 
   val emptyWorld = blockchain.getWorldStateProxy(-1, UInt256.Zero, None)
 

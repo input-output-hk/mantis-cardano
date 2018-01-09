@@ -1,6 +1,7 @@
 package io.iohk.ethereum.snappy
 
 import io.iohk.ethereum.blockchain.data.GenesisDataLoader
+import io.iohk.ethereum.consensus.ConsensusBuilder
 import io.iohk.ethereum.db.components.Storages.PruningModeComponent
 import io.iohk.ethereum.db.components.{SharedLevelDBDataSources, Storages}
 import io.iohk.ethereum.db.dataSource.{LevelDBDataSource, LevelDbConfig}
@@ -50,6 +51,8 @@ class Prerequisites(config: Config) {
   val targetBlockchain = targetStorages.map(ts => BlockchainImpl(ts.storages))
 
   private val components = new ValidatorsBuilder with BlockchainConfigBuilder with SyncConfigBuilder
+    // FIXME What are the semantics after PoW decoupling?
+    with ConsensusBuilder
 
 
   val ledger: Ledger = targetBlockchain match {

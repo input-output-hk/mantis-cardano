@@ -37,6 +37,9 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import java.time.Duration
 
+import io.iohk.ethereum.consensus.ConsensusConfig
+import io.iohk.ethereum.consensus.ethash.MiningConfig
+
 // scalastyle:off file.size.limit
 class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks with ScalaFutures with NormalPatience with Eventually {
 
@@ -1415,12 +1418,15 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       override val coinbase: Address = Address(Hex.decode("42" * 20))
       override val blockCacheSize: Int = 30
       override val ommersPoolSize: Int = 30
-      override val activeTimeout: FiniteDuration = Timeouts.normalTimeout
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
       override val miningEnabled: Boolean = false
       override val ethashDir: String = "~/.ethash"
       override val mineRounds: Int = 100000
+    }
+
+    val consensusConfig: ConsensusConfig = new ConsensusConfig {
+      def activeTimeout: FiniteDuration = Timeouts.normalTimeout
     }
 
     val filterConfig = new FilterConfig {
@@ -1434,7 +1440,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val web3Service = new Web3Service
     val netService = mock[NetService]
     val personalService = mock[PersonalService]
-    val ethService = new EthService(blockchain, blockGenerator, appStateStorage, miningConfig, ledger,
+    val ethService = new EthService(blockchain, blockGenerator, appStateStorage, consensusConfig, ledger,
       keyStore, pendingTransactionsManager.ref, syncingController.ref, ommersPool.ref, filterManager.ref, filterConfig,
       blockchainConfig, currentProtocolVersion)
     val jsonRpcController = new JsonRpcController(web3Service, netService, ethService, personalService, config)
