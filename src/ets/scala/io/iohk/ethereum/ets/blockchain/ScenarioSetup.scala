@@ -2,15 +2,16 @@ package io.iohk.ethereum.ets.blockchain
 
 import akka.actor.ActorSystem
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
+import io.iohk.ethereum.consensus.{ConsensusBuilder, ConsensusConfigBuilder}
 import io.iohk.ethereum.domain.Block.BlockDec
 import io.iohk.ethereum.domain.{Account, Address, Block, UInt256}
 import io.iohk.ethereum.ets.common.AccountState
 import io.iohk.ethereum.extvm.ExtVMInterface
 import io.iohk.ethereum.ledger._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
-import io.iohk.ethereum.nodebuilder.{ActorSystemBuilder, BlockchainConfigBuilder, SyncConfigBuilder, ValidatorsBuilder}
+import io.iohk.ethereum.nodebuilder.{ActorSystemBuilder, BlockchainConfigBuilder, ShutdownHookBuilder, SyncConfigBuilder, ValidatorsBuilder}
 import io.iohk.ethereum.utils.BigIntExtensionMethods._
-import io.iohk.ethereum.utils.{BlockchainConfig, Config}
+import io.iohk.ethereum.utils.{BlockchainConfig, Logger, Config}
 import io.iohk.ethereum.vm.VM
 import org.spongycastle.util.encoders.Hex
 
@@ -27,7 +28,12 @@ abstract class ScenarioSetup(scenario: BlockchainScenario)
   with ValidatorsBuilder
   with SyncConfigBuilder
   with BlockchainConfigBuilder
-  with ActorSystemBuilder {
+  with ActorSystemBuilder
+  // FIXME What are the semantics after PoW decoupling?
+  with ConsensusBuilder
+  with ConsensusConfigBuilder
+  with ShutdownHookBuilder
+  with Logger {
 
   import ScenarioSetup._
 
