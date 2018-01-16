@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import akka.util.ByteString
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
+import io.iohk.ethereum.consensus.Ethash
 import io.iohk.ethereum.{Fixtures, NormalPatience, Timeouts}
 // FIXME uncomment
 //import io.iohk.ethereum.crypto.{ECDSASignature, kec256}
@@ -1426,14 +1427,15 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       override val ommersPoolSize: Int = 30
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
-      override val miningEnabled: Boolean = false
       override val ethashDir: String = "~/.ethash"
       override val mineRounds: Int = 100000
     }
 
-    val consensusConfig: ConsensusConfig = new ConsensusConfig {
-      def activeTimeout: FiniteDuration = Timeouts.normalTimeout
-    }
+    val consensusConfig: ConsensusConfig = ConsensusConfig(
+      protocol = Ethash, // FIXME is it OK for the test?
+      activeTimeout = Timeouts.shortTimeout,
+      miningEnabled = false
+    )
 
     val filterConfig = new FilterConfig {
       override val filterTimeout: FiniteDuration = Timeouts.normalTimeout

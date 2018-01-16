@@ -7,7 +7,7 @@ import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import akka.util.ByteString
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
-import io.iohk.ethereum.consensus.ConsensusConfig
+import io.iohk.ethereum.consensus.{ConsensusConfig, Ethash}
 import io.iohk.ethereum.consensus.ethash.MiningConfig
 import io.iohk.ethereum.{Fixtures, NormalPatience, Timeouts, crypto}
 import io.iohk.ethereum.domain.{Address, Block, BlockHeader, BlockchainImpl, UInt256, _}
@@ -858,14 +858,15 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
       override val ommersPoolSize: Int = 30
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
-      override val miningEnabled: Boolean = false
       override val ethashDir: String = "~/.ethash"
       override val mineRounds: Int = 100000
     }
 
-    val consensusConfig: ConsensusConfig = new ConsensusConfig {
-      def activeTimeout: FiniteDuration = Timeouts.shortTimeout
-    }
+    val consensusConfig: ConsensusConfig = ConsensusConfig(
+      protocol = Ethash, // FIXME is it OK for the test?
+      activeTimeout = Timeouts.shortTimeout,
+      miningEnabled = false
+    )
 
 
     val filterConfig = new FilterConfig {

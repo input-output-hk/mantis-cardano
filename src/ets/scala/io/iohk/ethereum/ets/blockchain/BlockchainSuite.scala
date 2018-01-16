@@ -24,6 +24,7 @@ class BlockchainSuite extends FreeSpec with Matchers with Logger {
           if options.isScenarioIncluded(name)
         } {
           name in new ScenarioSetup(scenario) {
+
             if (unsupportedNetworks.contains(scenario.network)) {
               cancel(s"Unsupported network: ${scenario.network}")
             } else if (!supportedNetworks.contains(scenario.network)) {
@@ -46,7 +47,7 @@ class BlockchainSuite extends FreeSpec with Matchers with Logger {
     ignoredTests.get(groupName).isDefined && (ignoredTests(groupName).contains(testName) || ignoredTests(groupName).isEmpty)
 
   private def runScenario(scenario: BlockchainScenario, setup: ScenarioSetup): Unit = {
-    import setup._
+    import setup.{log ⇒ _, _}
 
     loadGenesis()
 

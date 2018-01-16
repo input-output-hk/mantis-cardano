@@ -32,8 +32,8 @@ class Miner(
   syncController: ActorRef,
   miningConfig: MiningConfig,
   ethService: EthService,
-  consensus: Consensus)
-  extends Actor with ActorLogging {
+  consensus: Consensus
+) extends Actor with ActorLogging {
 
   import Miner._
   import akka.pattern.ask

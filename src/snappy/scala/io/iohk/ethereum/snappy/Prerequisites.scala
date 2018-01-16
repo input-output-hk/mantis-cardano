@@ -1,16 +1,17 @@
 package io.iohk.ethereum.snappy
 
 import io.iohk.ethereum.blockchain.data.GenesisDataLoader
-import io.iohk.ethereum.consensus.ConsensusBuilder
+import io.iohk.ethereum.consensus.{ConsensusBuilder, ConsensusConfigBuilder}
 import io.iohk.ethereum.db.components.Storages.PruningModeComponent
 import io.iohk.ethereum.db.components.{SharedLevelDBDataSources, Storages}
 import io.iohk.ethereum.db.dataSource.{LevelDBDataSource, LevelDbConfig}
 import io.iohk.ethereum.db.storage.pruning.ArchivePruning
 import io.iohk.ethereum.domain.BlockchainImpl
 import io.iohk.ethereum.ledger.{Ledger, LedgerImpl}
-import io.iohk.ethereum.nodebuilder.{BlockchainConfigBuilder, SyncConfigBuilder, ValidatorsBuilder}
+import io.iohk.ethereum.nodebuilder.{BlockchainConfigBuilder, ShutdownHookBuilder, SyncConfigBuilder, ValidatorsBuilder}
 import io.iohk.ethereum.snappy.Config.{DualDB, SingleDB}
 import io.iohk.ethereum.snappy.Prerequisites._
+import io.iohk.ethereum.utils.Logger
 import io.iohk.ethereum.vm.VM
 
 
@@ -52,7 +53,7 @@ class Prerequisites(config: Config) {
 
   private val components = new ValidatorsBuilder with BlockchainConfigBuilder with SyncConfigBuilder
     // FIXME What are the semantics after PoW decoupling?
-    with ConsensusBuilder
+    with ConsensusBuilder with ConsensusConfigBuilder with ShutdownHookBuilder with Logger
 
 
   val ledger: Ledger = targetBlockchain match {

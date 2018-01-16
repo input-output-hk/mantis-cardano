@@ -3,15 +3,19 @@ package ethash
 
 import akka.util.ByteString
 import io.iohk.ethereum.domain.BlockHeader
+import io.iohk.ethereum.nodebuilder.Node
 import io.iohk.ethereum.utils.BlockchainConfig
 import io.iohk.ethereum.validators.{BlockHeaderError, BlockHeaderValid, BlockHeaderValidator, BlockHeaderValidatorImpl}
 
 /**
- * Implements standard Ethereum consensus.
+ * Implements standard Ethereum consensus (ethash PoW).
  */
-class EthashConsensus(blockchainConfig: BlockchainConfig) extends Consensus {
+class EthashConsensus(
+  blockchainConfig: BlockchainConfig,
+  miningConfig: MiningConfig
+) extends Consensus {
   private[this] val defaultValidator = new BlockHeaderValidatorImpl(blockchainConfig)
-  private[this] val powValidator = new validators.BlockHeaderValidatorImpl(blockchainConfig)
+  private[this] val powValidator = new ethash.validators.BlockHeaderValidatorImpl(blockchainConfig)
 
   private[this] val ethashValidator = new BlockHeaderValidator {
     def validate(
@@ -26,5 +30,11 @@ class EthashConsensus(blockchainConfig: BlockchainConfig) extends Consensus {
     }
   }
 
-  override def blockHeaderValidator: BlockHeaderValidator = ethashValidator
+  def blockHeaderValidator: BlockHeaderValidator = ethashValidator
+
+  def startMiningProcess(node: Node): Unit = {
+    val minerBuilder = new MinerBuilder(node, miningConfig)
+    val miner = minerBuilder.miner
+    miner ! Miner.StartMining
+  }
 }

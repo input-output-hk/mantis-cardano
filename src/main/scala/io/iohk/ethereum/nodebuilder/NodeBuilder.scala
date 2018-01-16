@@ -38,6 +38,9 @@ import io.iohk.ethereum.vm.VM
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.utils.Config.SyncConfig
 
+import scala.concurrent.Await
+import scala.util.{Failure, Success, Try}
+
 // scalastyle:off number.of.types
 trait BlockchainConfigBuilder {
   lazy val blockchainConfig = BlockchainConfig(Config.config)
@@ -394,9 +397,8 @@ trait SyncControllerBuilder {
 
 }
 
-trait ShutdownHookBuilder {
-
-  def shutdown(): Unit
+trait ShutdownHookBuilder { self: Logger ⇒
+  def shutdown(): Unit = {/* No default behaviour during shutdown. */}
 
   lazy val shutdownTimeoutDuration = Config.shutdownTimeout
 
@@ -405,6 +407,16 @@ trait ShutdownHookBuilder {
       shutdown()
     }
   })
+
+  def shutdownOnError[A](f: ⇒ A): A = {
+    Try(f) match {
+      case Success(v) ⇒ v
+      case Failure(t) ⇒
+        log.error(t.getMessage, t)
+        shutdown()
+        throw t
+    }
+  }
 }
 
 trait GenesisDataLoaderBuilder {
@@ -420,6 +432,12 @@ trait SecureRandomBuilder {
     Config.secureRandomAlgo.map(SecureRandom.getInstance).getOrElse(new SecureRandom())
 }
 
+/**
+ * Provides the basic functionality of a Node, except the consensus algorithm.
+ * The latter is loaded dynamically based on configuration.
+ *
+ * @see [[]]
+ */
 trait Node extends NodeKeyBuilder
   with ActorSystemBuilder
   with StorageBuilder
@@ -441,6 +459,7 @@ trait Node extends NodeKeyBuilder
   with JSONRpcControllerBuilder
   with JSONRpcHttpServerBuilder
   with ShutdownHookBuilder
+  with Logger
   with GenesisDataLoaderBuilder
   with BlockchainConfigBuilder
   with PeerEventBusBuilder
@@ -461,3 +480,43 @@ trait Node extends NodeKeyBuilder
   with SyncConfigBuilder
   with ConsensusBuilder
   with ConsensusConfigBuilder
+
+/**
+ * A standard node is everything except the consensus algorithm, which is plugged in dynamically.
+ */
+class StdNode extends Node {
+  def start(): Unit = {
+    genesisDataLoader.loadGenesisData()
+
+    peerManager ! PeerManagerActor.StartConnecting
+    server ! ServerActor.StartServer(networkConfig.Server.listenAddress)
+
+    if (discoveryConfig.discoveryEnabled) {
+      discoveryListener ! DiscoveryListener.Start
+    }
+
+    syncController ! SyncController.Start
+
+    if(consensusConfig.miningEnabled) {
+      consensus.startMiningProcess(this) // whatever that means for each consensus protocol
+    }
+
+    peerDiscoveryManager // unlazy
+
+    maybeJsonRpcServer match {
+      case Right(jsonRpcServer) if jsonRpcServerConfig.enabled => jsonRpcServer.run()
+      case Left(error) if jsonRpcServerConfig.enabled => log.error(error)
+      case _=> //Nothing
+    }
+  }
+
+  def tryAndLogFailure(f: () => Any): Unit = Try(f()) match {
+    case Failure(e) => log.warn("Error while shutting down...", e)
+    case Success(_) =>
+  }
+
+  override def shutdown(): Unit = {
+    tryAndLogFailure(() => Await.ready(actorSystem.terminate, shutdownTimeoutDuration))
+    tryAndLogFailure(() => storagesInstance.dataSources.closeAll())
+  }
+}

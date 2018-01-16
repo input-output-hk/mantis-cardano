@@ -1,24 +1,43 @@
 package io.iohk.ethereum.consensus
 
-import io.iohk.ethereum.nodebuilder.BlockchainConfigBuilder
-import io.iohk.ethereum.validators.BlockHeaderValidator
+import io.iohk.ethereum.consensus.ethash.{EthashConsensus, MiningConfig}
+import io.iohk.ethereum.nodebuilder.{BlockchainConfigBuilder, ShutdownHookBuilder}
+import io.iohk.ethereum.utils.{Config, Logger}
 
-import scala.concurrent.duration.FiniteDuration
-
-// NOTE subsumes MinerBuilder, since the selection of consensus algorith will decide if it is needed.
+/**
+ * A consensus builder is responsible to instantiate the consensus protocol.
+ */
 trait ConsensusBuilder {
-  self: BlockchainConfigBuilder =>
+  /**
+   * Specified
+   */
+  self: BlockchainConfigBuilder with ConsensusConfigBuilder with Logger =>
 
-  // FIXME Create dynamically from configuration
-  lazy val consensus: Consensus = new Consensus {
-    def blockHeaderValidator: BlockHeaderValidator = ???
+  private def loadEthashConsensus(): EthashConsensus = {
+    val miningConfig = MiningConfig(Config.config)
+    val consensus = new EthashConsensus(blockchainConfig, miningConfig)
+    consensus
   }
+
+  private def loadConsensus(): Consensus = {
+    val config = consensusConfig
+    val protocol = config.protocol
+    log.info(s"Configured consensus protocol: ${protocol.name}")
+
+    val consensus =
+      config.protocol match {
+        case Ethash ⇒ loadEthashConsensus()
+        case DemoPoS ⇒ ??? // FIXME implement
+      }
+    log.info(s"${protocol.name} protocol implemented by ${consensus.getClass.getName}")
+
+    consensus
+  }
+
+  lazy val consensus: Consensus = loadConsensus()
 }
 
 // NOTE Subsumes MiningConfigBuilder
-trait ConsensusConfigBuilder {
-  // FIXME implement
-  lazy val consensusConfig: ConsensusConfig = new ConsensusConfig {
-    def activeTimeout: FiniteDuration = ???
-  }
+trait ConsensusConfigBuilder { self: ShutdownHookBuilder ⇒
+  lazy val consensusConfig: ConsensusConfig = ConsensusConfig(Config.config)(this)
 }
