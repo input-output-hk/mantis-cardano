@@ -17,14 +17,14 @@ object Protocol {
     // This is the standard Ethereum PoW consensus protocol.
     final val Ethash = "ethash"
 
-    // This is a PoS consensus protocol for demonstration purposes
-    final val DemoPoS = "demo-pos"
+    // This is a dummy consensus protocol for demonstration purposes (pluggable consensus)
+    final val DemoConsensus = "demo-consensus"
   }
 
   def find(name: String): Option[Protocol] =
     name match {
       case Names.Ethash ⇒ Some(Ethash)
-      case Names.DemoPoS ⇒ Some(DemoPoS)
+      case Names.DemoConsensus ⇒ Some(DemoPoS)
       case _ ⇒ None
     }
 
@@ -42,5 +42,5 @@ case object Ethash extends Protocol {
 }
 
 case object DemoPoS extends Protocol {
-  final val name = Protocol.Names.DemoPoS
+  final val name = Protocol.Names.DemoConsensus
 }

@@ -10,7 +10,14 @@ import io.iohk.ethereum.validators.BlockHeaderValidator
 // FIXME Lot's of stuff to do...
 trait Consensus {
   /**
-   * Starts the mining process. It is up to the consensus protocol to define the semantics of mining.
+   * Starts the consensus protocol on the current `node`.
+   * This call must be made before `startMiningProcess`.
+   */
+  def startProtocol(node: Node): Unit
+
+  /**
+   * Starts the mining process on the current `node`.
+   * It is up to the consensus protocol to define the semantics of mining.
    */
   def startMiningProcess(node: Node): Unit
 

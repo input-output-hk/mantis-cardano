@@ -497,7 +497,10 @@ class StdNode extends Node {
 
     syncController ! SyncController.Start
 
+    consensus.startProtocol(this)
+
     if(consensusConfig.miningEnabled) {
+      log.info("Mining is enabled")
       consensus.startMiningProcess(this) // whatever that means for each consensus protocol
     }
 

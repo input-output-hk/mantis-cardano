@@ -24,7 +24,7 @@ import io.iohk.ethereum.crypto._
 // NOTE decoupled from MiningConfig
 class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
   headerExtraData: ByteString, blockCacheSize: Int,
-  ledger: Ledger, validators: Validators, blockTimestampProvider: BlockTimestampProvider = DefaultBlockTimestampProvider) {
+  ledger: Ledger, validators: Validators, val blockTimestampProvider: BlockTimestampProvider = DefaultBlockTimestampProvider) {
 
   val difficulty = new DifficultyCalculator(blockchainConfig)
 

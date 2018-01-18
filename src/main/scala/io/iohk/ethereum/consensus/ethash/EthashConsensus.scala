@@ -37,4 +37,9 @@ class EthashConsensus(
     val miner = minerBuilder.miner
     miner ! Miner.StartMining
   }
+
+  /**
+   * Starts the consensus protocol.
+   */
+  def startProtocol(node: Node): Unit = {/* nothing special to do here, since it is all handled by the miner*/}
 }

@@ -1,6 +1,5 @@
 package io.iohk.ethereum.consensus
 
-import io.iohk.ethereum.consensus.ethash.{EthashConsensus, MiningConfig}
 import io.iohk.ethereum.nodebuilder.{BlockchainConfigBuilder, ShutdownHookBuilder}
 import io.iohk.ethereum.utils.{Config, Logger}
 
@@ -8,14 +7,19 @@ import io.iohk.ethereum.utils.{Config, Logger}
  * A consensus builder is responsible to instantiate the consensus protocol.
  */
 trait ConsensusBuilder {
-  /**
-   * Specified
-   */
   self: BlockchainConfigBuilder with ConsensusConfigBuilder with Logger =>
 
-  private def loadEthashConsensus(): EthashConsensus = {
-    val miningConfig = MiningConfig(Config.config)
-    val consensus = new EthashConsensus(blockchainConfig, miningConfig)
+  private lazy val mantisConfig = Config.config
+
+  private def loadEthashConsensus(): ethash.EthashConsensus = {
+    val config = ethash.MiningConfig(mantisConfig)
+    val consensus = new ethash.EthashConsensus(blockchainConfig, config)
+    consensus
+  }
+
+  private def loadDemoConsensus(): demo.DemoConsensus = {
+    val config = demo.DemoConsensusConfig(mantisConfig)
+    val consensus = new demo.DemoConsensus(blockchainConfig, config)
     consensus
   }
 
@@ -27,7 +31,7 @@ trait ConsensusBuilder {
     val consensus =
       config.protocol match {
         case Ethash ⇒ loadEthashConsensus()
-        case DemoPoS ⇒ ??? // FIXME implement
+        case DemoPoS ⇒ loadDemoConsensus()
       }
     log.info(s"${protocol.name} protocol implemented by ${consensus.getClass.getName}")
 
@@ -37,7 +41,6 @@ trait ConsensusBuilder {
   lazy val consensus: Consensus = loadConsensus()
 }
 
-// NOTE Subsumes MiningConfigBuilder
 trait ConsensusConfigBuilder { self: ShutdownHookBuilder ⇒
   lazy val consensusConfig: ConsensusConfig = ConsensusConfig(Config.config)(this)
 }
