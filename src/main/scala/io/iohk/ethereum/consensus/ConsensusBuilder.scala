@@ -5,6 +5,7 @@ import io.iohk.ethereum.utils.{Config, Logger}
 
 /**
  * A consensus builder is responsible to instantiate the consensus protocol.
+ * This is done dynamically when Mantis boots, based on its configuration.
  */
 trait ConsensusBuilder {
   self: BlockchainConfigBuilder with ConsensusConfigBuilder with Logger =>
@@ -12,14 +13,14 @@ trait ConsensusBuilder {
   private lazy val mantisConfig = Config.config
 
   private def loadEthashConsensus(): ethash.EthashConsensus = {
-    val config = ethash.MiningConfig(mantisConfig)
-    val consensus = new ethash.EthashConsensus(blockchainConfig, config)
+    val miningConfig = ethash.MiningConfig(mantisConfig)
+    val consensus = new ethash.EthashConsensus(blockchainConfig, consensusConfig, miningConfig)
     consensus
   }
 
   private def loadDemoConsensus(): demo.DemoConsensus = {
-    val config = demo.DemoConsensusConfig(mantisConfig)
-    val consensus = new demo.DemoConsensus(blockchainConfig, config)
+    val demoConsensusConfig = demo.DemoConsensusConfig(mantisConfig)
+    val consensus = new demo.DemoConsensus(blockchainConfig, consensusConfig, demoConsensusConfig)
     consensus
   }
 
