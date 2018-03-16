@@ -35,5 +35,6 @@ package object consensus {
 
   // FIXME Put extra utilities here instead of polluting the primary interface
   final implicit class RichConsensus(val consensus: Consensus) extends AnyVal {
+    def isEthash: Boolean = ???
   }
 }

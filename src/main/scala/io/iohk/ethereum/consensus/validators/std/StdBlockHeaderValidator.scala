@@ -5,14 +5,12 @@ import akka.util.ByteString
 import io.iohk.ethereum.domain.{BlockHeader, DifficultyCalculator}
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig}
 
-// FIXME Decouple PoW validation
 class StdBlockHeaderValidator(blockchainConfig: BlockchainConfig) extends BlockHeaderValidator {
 
   import BlockHeaderError._
   import StdBlockHeaderValidator._
 
-  // FIXME Reflect the need for being concurrent
-  // we need concurrent map since validators can be used from multiple places
+  // [original comment:] we need concurrent map since validators can be used from multiple places
   val powCaches: java.util.concurrent.ConcurrentMap[Long, PowCacheData] = new java.util.concurrent.ConcurrentHashMap[Long, PowCacheData]()
 
   val difficulty = new DifficultyCalculator(blockchainConfig)
@@ -23,7 +21,6 @@ class StdBlockHeaderValidator(blockchainConfig: BlockchainConfig) extends BlockH
    * @param blockHeader BlockHeader to validate.
    * @param parentHeader BlockHeader of the parent of the block to validate.
    */
-  // FIXME Promote to the interface? (but there will be compilation errors ...)
   def validate(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
     for {
       _ <- validateExtraData(blockHeader)
@@ -151,8 +148,7 @@ object StdBlockHeaderValidator {
   val MaxExtraDataSize: Int = 32
   val GasLimitBoundDivisor: Int = 1024
   val MinGasLimit: BigInt = 5000 //Although the paper states this value is 125000, on the different clients 5000 is used
-  val MaxGasLimit = Long.MaxValue // max gasLimit is equal 2^63-1 according to EIP106
+  val MaxGasLimit: Long = Long.MaxValue // max gasLimit is equal 2^63-1 according to EIP106
 
   class PowCacheData(val cache: Array[Int], val dagSize: Long)
-
 }

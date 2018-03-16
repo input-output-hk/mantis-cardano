@@ -34,7 +34,7 @@ object Protocol {
   case object AtomixRaft extends ProtocolImpl(Names.AtomixRaft, false)
 
   /** All the known protocols. If a protocol is not put here, then it cannot be used to run Mantis. */
-  final val KnownProtocols = Set(
+  final val KnownProtocols: Set[Protocol] = Set(
     Ethash,
     AtomixRaft
   )

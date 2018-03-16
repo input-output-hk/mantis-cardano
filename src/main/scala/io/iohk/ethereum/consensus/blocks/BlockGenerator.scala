@@ -28,6 +28,7 @@ trait BlockGenerator {
   def emptyX: X
 
   // FIXME This is currently used only for Ethash
+  // @see [[io.iohk.ethereum.jsonrpc.EthService.submitWork]]
   def getPrepared(powHeaderHash: ByteString): Option[PendingBlock]
 
   /**
