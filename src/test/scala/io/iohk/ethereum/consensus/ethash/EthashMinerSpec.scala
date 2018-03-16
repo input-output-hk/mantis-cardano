@@ -7,7 +7,7 @@ import akka.testkit.{TestActor, TestActorRef, TestProbe}
 import akka.util.ByteString
 import io.iohk.ethereum.blockchain.sync.{RegularSync, ScenarioSetup}
 import io.iohk.ethereum.consensus.blocks.PendingBlock
-import io.iohk.ethereum.consensus.ethash.blocks.TestEthashBlockGenerator
+import io.iohk.ethereum.consensus.ethash.blocks.EthashBlockGenerator
 import io.iohk.ethereum.consensus.validators.BlockHeaderValid
 import io.iohk.ethereum.consensus.validators.std.StdBlockHeaderValidator
 import io.iohk.ethereum.domain._
@@ -82,7 +82,7 @@ class EthashMinerSpec extends FlatSpec with Matchers {
       ),
       BlockBody(Seq(), Seq()))
 
-    val blockGenerator: TestEthashBlockGenerator = mock[TestEthashBlockGenerator]
+    val blockGenerator: EthashBlockGenerator = mock[EthashBlockGenerator]
 
     override lazy val blockchain: BlockchainImpl = mock[BlockchainImpl]
     override lazy val vm: VMImpl = new VMImpl

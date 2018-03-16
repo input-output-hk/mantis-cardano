@@ -38,7 +38,7 @@ import scala.concurrent.duration._
 import java.time.Duration
 
 import io.iohk.ethereum.consensus.blocks.PendingBlock
-import io.iohk.ethereum.consensus.ethash.blocks.TestEthashBlockGenerator
+import io.iohk.ethereum.consensus.ethash.blocks.EthashBlockGenerator
 import io.iohk.ethereum.consensus.ethash.validators.EthashValidators
 import io.iohk.ethereum.consensus.validators.SignedTransactionValidator
 
@@ -1434,7 +1434,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
   trait TestSetup extends MockFactory with EphemBlockchainTestSetup {
     def config: JsonRpcConfig = Config.Network.Rpc
 
-    val blockGenerator = mock[TestEthashBlockGenerator]
+    val blockGenerator = mock[EthashBlockGenerator]
 
     override implicit lazy val system = ActorSystem("JsonRpcControllerSpec_System")
 

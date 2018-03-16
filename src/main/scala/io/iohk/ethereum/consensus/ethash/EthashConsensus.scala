@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicReference
 import akka.actor.ActorRef
 import io.iohk.ethereum.consensus.blocks.TestBlockGenerator
 import io.iohk.ethereum.consensus.ethash.EthashMiner.MinerMsg
-import io.iohk.ethereum.consensus.ethash.blocks.EthashBlockGenerator
+import io.iohk.ethereum.consensus.ethash.blocks.{EthashBlockGenerator, EthashBlockGeneratorImpl}
 import io.iohk.ethereum.consensus.ethash.validators.{EthashValidators, StdEthashValidators}
 import io.iohk.ethereum.consensus.validators.Validators
 import io.iohk.ethereum.domain.{Block, BlockchainImpl}
@@ -88,7 +88,7 @@ class EthashConsensus private(
           blockchainConfig = blockchainConfig
         )
 
-        new EthashBlockGenerator(
+        new EthashBlockGeneratorImpl(
           validators = _validators,
           blockchain = blockchain,
           blockchainConfig = blockchainConfig,
@@ -191,7 +191,7 @@ object EthashConsensus {
       blockchainConfig = blockchainConfig
     )
 
-    val blockGenerator = new EthashBlockGenerator(
+    val blockGenerator = new EthashBlockGeneratorImpl(
       validators = validators,
       blockchain = blockchain,
       blockchainConfig = blockchainConfig,
