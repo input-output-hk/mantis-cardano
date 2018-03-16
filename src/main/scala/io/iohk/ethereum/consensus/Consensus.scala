@@ -1,7 +1,7 @@
 package io.iohk.ethereum.consensus
 
 import akka.util.ByteString
-import io.iohk.ethereum.consensus.blocks.BlockGenerator
+import io.iohk.ethereum.consensus.blocks.{BlockGenerator, TestBlockGenerator}
 import io.iohk.ethereum.consensus.ethash.EthashConsensus
 import io.iohk.ethereum.consensus.validators.Validators
 import io.iohk.ethereum.domain._
@@ -110,10 +110,14 @@ trait Consensus {
  * but it is the developer's responsibility to maintain consistency (though the
  * particular consensus protocols we implement so far do their best
  * in that direction).
+ *
+ * @see [[io.iohk.ethereum.consensus.blocks.TestBlockGenerator TestBlockGenerator]].
  */
 trait TestConsensus extends Consensus {
   /** Internal API, used for testing */
-  protected def newBlockGenerator(validators: Validators): BlockGenerator
+  protected def newBlockGenerator(validators: Validators): TestBlockGenerator
+
+  def blockGenerator: TestBlockGenerator
 
   /** Internal API, used for testing */
   def withValidators(validators: Validators): TestConsensus
@@ -122,7 +126,7 @@ trait TestConsensus extends Consensus {
   def withVM(vm: VMImpl): TestConsensus
 
   /** Internal API, used for testing */
-  def withBlockGenerator(blockGenerator: BlockGenerator): TestConsensus
+  def withBlockGenerator(blockGenerator: TestBlockGenerator): TestConsensus
 }
 
 abstract class ConsensusImpl[C <: AnyRef](

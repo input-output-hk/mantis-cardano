@@ -11,14 +11,14 @@ import io.iohk.ethereum.utils.BlockchainConfig
 import scala.collection.immutable
 
 /** Internal API, used for testing (especially mocks) */
-trait EthashBlockGenerator extends BlockGenerator {
+trait TestEthashBlockGenerator extends TestBlockGenerator {
   type X = Ommers
 
   /** An empty `X` */
   def emptyX: Ommers
 }
 
-class EthashBlockGeneratorImpl(
+class EthashBlockGenerator(
   validators: EthashValidators,
   blockchain: Blockchain,
   blockchainConfig: BlockchainConfig,
@@ -31,7 +31,7 @@ class EthashBlockGeneratorImpl(
   consensusConfig,
   blockPreparator,
   blockTimestampProvider
-) with EthashBlockGenerator {
+) with TestEthashBlockGenerator {
 
   protected def newBlockBody(transactions: immutable.Seq[SignedTransaction], ommers: Ommers): BlockBody = {
     BlockBody(transactions, ommers)
@@ -73,8 +73,8 @@ class EthashBlockGeneratorImpl(
     result.map(_.pendingBlock)
   }
 
-  def withBlockTimestampProvider(blockTimestampProvider: BlockTimestampProvider): EthashBlockGeneratorImpl =
-    new EthashBlockGeneratorImpl(
+  def withBlockTimestampProvider(blockTimestampProvider: BlockTimestampProvider): EthashBlockGenerator =
+    new EthashBlockGenerator(
       validators,
       blockchain,
       blockchainConfig,

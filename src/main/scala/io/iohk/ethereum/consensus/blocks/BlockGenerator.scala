@@ -40,14 +40,22 @@ trait BlockGenerator {
 
   def blockTimestampProvider: BlockTimestampProvider
 
-  // FIXME This is currently used for testing
-  def withBlockTimestampProvider(blockTimestampProvider: BlockTimestampProvider): BlockGenerator
-
-  // FIXME Rename to: generateBlock
+  // FIXME Rename to generateBlock, since "Mining" does not always apply
   def generateBlockForMining(
     parent: Block,
     transactions: Seq[SignedTransaction],
     beneficiary: Address,
     ommers: X // we call it `ommers` in order to remember what is needed in Ethash but in general it can be anything
   ): Either[BlockPreparationError, PendingBlock]
+}
+
+/**
+ * Internal API, used for testing.
+ *
+ * This is a [[BlockGenerator]] API for the needs of the test suites.
+ *
+ * @see [[io.iohk.ethereum.consensus.TestConsensus TestConsensus]].
+ */
+trait TestBlockGenerator extends BlockGenerator {
+  def withBlockTimestampProvider(blockTimestampProvider: BlockTimestampProvider): TestBlockGenerator
 }
