@@ -118,6 +118,7 @@ abstract class BaseNode extends Node with EventSupport {
 
     startJsonRpcHttpServer()
     startJsonRpcIpcServer()
+    startJsonRpcWebsocketServer()
 
     startHealthcheckSender()
   }
