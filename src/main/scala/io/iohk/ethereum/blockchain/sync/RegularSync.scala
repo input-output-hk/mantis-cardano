@@ -7,6 +7,7 @@ import io.iohk.ethereum.blockchain.sync.PeerRequestHandler.ResponseReceived
 import io.iohk.ethereum.crypto._
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.eventbus.event.NewHead
 import io.iohk.ethereum.ledger._
 import io.iohk.ethereum.mpt.MerklePatriciaTrie.MissingNodeException
 import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
@@ -159,7 +160,8 @@ class RegularSync(
             case BlockImportedToTop(newBlocks, newTds) =>
               broadcastBlocks(newBlocks, newTds)
               updateTxAndOmmerPools(newBlocks, Nil)
-
+              publishEvents(newBlocks)
+              
               Event.ok("block new imported to top")
                 .metric(newBlock.header.number.longValue)
                 .block(newBlock)
@@ -337,6 +339,7 @@ class RegularSync(
                 .metric(block.header.number.longValue)
                 .send()
 
+              publishEvents(blocks)
               broadcastBlocks(blocks, totalDifficulties)
               updateTxAndOmmerPools(blocks, Nil)
 
@@ -679,6 +682,11 @@ class RegularSync(
   private def notDownloading(): Boolean =
     headersQueue.isEmpty && waitingForActor.isEmpty && !resolvingBranches
 
+  private def publishEvents(newBlocks: Seq[Block]): Unit = {
+    newBlocks.foreach { newBlock =>
+      context.system.eventStream.publish(NewHead(newBlock))
+    }
+  }
 }
 
 object RegularSync {
