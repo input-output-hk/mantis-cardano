@@ -160,8 +160,8 @@ class RegularSync(
             case BlockImportedToTop(newBlocks, newTds) =>
               broadcastBlocks(newBlocks, newTds)
               updateTxAndOmmerPools(newBlocks, Nil)
-              publishEvents(newBlocks)
-              
+              publishEvents(newBlocks, Nil)
+
               Event.ok("block new imported to top")
                 .metric(newBlock.header.number.longValue)
                 .block(newBlock)
@@ -195,6 +195,7 @@ class RegularSync(
             case ChainReorganised(oldBranch, newBranch, totalDifficulties) =>
               updateTxAndOmmerPools(newBranch, oldBranch)
               broadcastBlocks(newBranch, totalDifficulties)
+              publishEvents(newBranch, oldBranch)
 
               Event.ok("block new chain reorganised")
                 .metric(newBlock.header.number.longValue)
@@ -339,7 +340,7 @@ class RegularSync(
                 .metric(block.header.number.longValue)
                 .send()
 
-              publishEvents(blocks)
+              publishEvents(blocks, Nil)
               broadcastBlocks(blocks, totalDifficulties)
               updateTxAndOmmerPools(blocks, Nil)
 
@@ -350,6 +351,7 @@ class RegularSync(
 
               broadcastBlocks(newBranch, totalDifficulties)
               updateTxAndOmmerPools(newBranch, oldBranch)
+              publishEvents(newBranch, oldBranch)
 
             case DuplicateBlock =>
               Event.warning("mined block chain duplicate")
@@ -598,7 +600,7 @@ class RegularSync(
         } else {
           context.self ! ResumeRegularSync
         }
-        publishEvents(importedBlocks)
+        publishEvents(importedBlocks, Nil)
     }
   }
 
@@ -683,10 +685,8 @@ class RegularSync(
   private def notDownloading(): Boolean =
     headersQueue.isEmpty && waitingForActor.isEmpty && !resolvingBranches
 
-  private def publishEvents(newBlocks: Seq[Block]): Unit = {
-    newBlocks.foreach { newBlock =>
-      context.system.eventStream.publish(NewHead(newBlock))
-    }
+  private def publishEvents(newBlocks: Seq[Block], removedBlocks: Seq[Block]): Unit = {
+    context.system.eventStream.publish(NewHead(removedBlocks, newBlocks))
   }
 }
 
