@@ -14,6 +14,8 @@ package object events {
 
     def attribute(name: String, value: Long): EventDSL = event.attribute(name, value.toString)
 
+    def attribute(name: String, value: Boolean): EventDSL = event.attribute(name, value.toString)
+
     def timeTakenMs(ms: Long): EventDSL = attribute(EventAttr.TimeTakenMs, ms)
 
     def count(count: Int): EventDSL = attribute(EventAttr.Count, count)
@@ -59,18 +61,21 @@ package object events {
   }
 
   object EventAttr {
+    final val AlreadyValidated = "alreadyValidated"
     final val Count = "count"
     final val Error = "error"
     final val File = "file"
     final val Id = "id"
     final val PeerId = "peerId"
     final val Resource = "resource"
+    final val ReceiptCount = "receiptCount"
     final val Status = "status"
     final val ThreadId = "threadId"
     final val ThreadName = "threadName"
     final val ThreadPriority = "threadPriority"
     final val TimeTakenMs = "timeTakenMs"
     final val TimeUnit = "timeUnit"
+    final val TransactionCount = "transactionCount"
     final val Type = "type"
     final val Unit = "unit"
   }

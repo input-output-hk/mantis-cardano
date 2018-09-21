@@ -1,5 +1,7 @@
 package io.iohk.ethereum.ledger
 
+import java.util.concurrent.TimeUnit
+
 import akka.util.ByteString
 import io.iohk.ethereum.consensus.Consensus
 import io.iohk.ethereum.consensus.validators.BlockHeaderError.HeaderParentNotFoundError
@@ -404,10 +406,19 @@ class LedgerImpl(
 
     blockExecResult match {
       case Left(error) ⇒
-        log.info(s"Block ${block.idTag} executed with error(s): ${error.reason}")
+        Event.warning(context)
+          .description(error.toString)
+          .block(block)
+          .attribute(EventAttr.AlreadyValidated, alreadyValidated)
+          .tag(error.getClass.getSimpleName)
+          .send()
 
-      case _ ⇒
-        log.debug(s"Block ${block.idTag} executed correctly")
+      case Right(receipts) ⇒
+        Event.ok(context)
+          .block(block)
+          .attribute(EventAttr.AlreadyValidated, alreadyValidated)
+          .attribute(EventAttr.ReceiptCount, receipts.size)
+          .send()
     }
 
     blockExecResult
@@ -438,19 +449,38 @@ class LedgerImpl(
     }
 
     val transactionCount = block.body.transactionList.size
+
     if(transactionCount > 0) {
-      log.debug(s"About to execute ${transactionCount} txs from block ${block.idTag}")
+      Event.okStart(context)
+        .block(block)
+        .attribute(EventAttr.TransactionCount, transactionCount)
+        .send()
     }
 
+    val startTimeNanos = System.nanoTime()
     val blockTxsExecResult = _blockPreparator.executeTransactions(block.body.transactionList, inputWorld, block.header)
+    val dtNanos = System.nanoTime() - startTimeNanos
+    val dtMillis = TimeUnit.NANOSECONDS.toMillis(dtNanos)
+
     blockTxsExecResult match {
-      case Right(_) =>
+      case Right(blockResult) =>
         if(transactionCount > 0) {
-          log.info(s"All ${transactionCount} txs from block ${block.idTag} were executed successfully")
+          Event.okFinish(context)
+            .block(block)
+            .attribute(EventAttr.TransactionCount, transactionCount)
+            .attribute(EventAttr.TimeTakenMs, dtMillis)
+            .send()
         }
 
       case Left(error) =>
-        log.error(s"[$context] Not all ${transactionCount} txs from block ${block.idTag} were executed correctly, due to ${error.reason}")
+        Event.warningFinish(context)
+          .block(block)
+          .description(error.reason)
+          .attribute(EventAttr.TransactionCount, transactionCount)
+          .attribute(EventAttr.TimeTakenMs, dtMillis)
+          .attribute(EventAttr.Error, error.reason)
+          .tag(error.getClass.getSimpleName)
+          .send()
     }
     blockTxsExecResult
   }

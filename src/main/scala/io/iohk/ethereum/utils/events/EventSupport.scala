@@ -33,8 +33,18 @@ trait EventSupport {
 
   protected def ok(): EventDSL = ok("")
 
-  protected def okStart(): EventDSL = ok(EventTag.Start).tag(EventTag.Start)
-  protected def okFinish(): EventDSL = ok(EventTag.Finish).tag(EventTag.Finish)
+  private[this] def okTagged(moreService: String, tag: String): EventDSL = {
+    val service = if(moreService.isEmpty) tag else s"${moreService} ${tag}"
+    ok(service).tag(tag)
+  }
+
+  protected def okStart(moreService: String): EventDSL = okTagged(moreService, EventTag.Start)
+
+  protected def okStart(): EventDSL = okStart("")
+
+  protected def okFinish(moreService: String): EventDSL = okTagged(moreService, EventTag.Finish)
+
+  protected def okFinish(): EventDSL = okFinish("")
 
   protected def warning(moreService: String): EventDSL = {
     val service = mkService(moreService)
@@ -42,7 +52,16 @@ trait EventSupport {
     postProcessAndTagMainService(event)
   }
 
-  protected def warningStart(): EventDSL = warning(EventTag.Start).tag(EventTag.Start)
+  private[this] def warningTagged(moreService: String, tag: String): EventDSL = {
+    val service = if(moreService.isEmpty) tag else s"${moreService} ${tag}"
+    warning(service).tag(tag)
+  }
+
+  protected def warningFinish(moreService: String): EventDSL = warningTagged(moreService, EventTag.Finish)
+
+  protected def warningStart(moreService: String): EventDSL = warningTagged(moreService, EventTag.Start)
+
+  protected def warningStart(): EventDSL = warningStart("")
 
   protected def error(moreService: String): EventDSL = {
     val service = mkService(moreService)

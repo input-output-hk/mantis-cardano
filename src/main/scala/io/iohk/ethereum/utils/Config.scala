@@ -391,7 +391,10 @@ object PruningConfig {
 
 case class VmConfig(
     mode: VmMode,
-    externalConfig: Option[VmConfig.ExternalConfig])
+    externalConfig: Option[VmConfig.ExternalConfig]) {
+
+  def isIele: Boolean = externalConfig.exists(_.isIele)
+}
 
 object VmConfig {
 
@@ -409,7 +412,9 @@ object VmConfig {
     val supportedVmTypes = Set(VmTypeIele, VmTypeKevm, VmTypeMantis)
   }
 
-  case class ExternalConfig(vmType: String, runVm: Boolean, executablePath: Option[String], host: String, port: Int)
+  case class ExternalConfig(vmType: String, runVm: Boolean, executablePath: Option[String], host: String, port: Int) {
+    def isIele: Boolean = vmType == ExternalConfig.VmTypeIele
+  }
 
   def apply(mpConfig: TypesafeConfig): VmConfig = {
     def parseExternalConfig(): ExternalConfig = {

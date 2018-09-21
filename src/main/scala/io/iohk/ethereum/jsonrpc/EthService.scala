@@ -26,7 +26,6 @@ import io.iohk.ethereum.rlp.RLPList
 import io.iohk.ethereum.rlp.UInt256RLPImplicits._
 import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransactionsResponse
-import io.iohk.ethereum.utils.VmConfig.ExternalConfig
 import io.iohk.ethereum.utils._
 import org.spongycastle.util.encoders.Hex
 
@@ -574,7 +573,7 @@ class EthService(
         }
 
 
-        if (vmConfig.externalConfig.exists(_.vmType == ExternalConfig.VmTypeIele)) {
+        if (vmConfig.isIele) {
           // for iele: check if tx data is valid
           if (vm.isValidIeleCall(signedTransaction.tx.payload)) processTx()
           else Future.successful(Left(JsonRpcErrors.InvalidParams("The transaction payload is not a valid RLP-encoded IELE function call.")))
@@ -586,7 +585,7 @@ class EthService(
   }
 
   def call(req: CallRequest): ServiceResponse[CallResponse] = {
-    if (vmConfig.externalConfig.exists(_.vmType == ExternalConfig.VmTypeIele)) {
+    if (vmConfig.isIele) {
       // for iele: check if tx data is valid
       if (vm.isValidIeleCall(req.tx.data)) Future(doCall(req)(ledger.simulateTransaction).map(r => CallResponse(r.vmReturnData)))
       else Future.successful(Left(JsonRpcErrors.InvalidParams("The transaction payload is not a valid RLP-encoded IELE function call.")))
@@ -614,7 +613,7 @@ class EthService(
   }
 
   def estimateGas(req: CallRequest): ServiceResponse[EstimateGasResponse] = {
-    if (vmConfig.externalConfig.exists(_.vmType == ExternalConfig.VmTypeIele)) {
+    if (vmConfig.isIele) {
       // for iele: check if tx data is valid
       if (vm.isValidIeleCall(req.tx.data)) Future(doCall(req)(ledger.binarySearchGasEstimation).map(gasUsed => EstimateGasResponse(gasUsed)))
       else Future.successful(Left(JsonRpcErrors.InvalidParams("The transaction payload is not a valid RLP-encoded IELE function call.")))
