@@ -58,7 +58,7 @@ object VmSetup extends Logger {
 
   private def startMantisVmInThisProcess(): Unit = {
     log.info("Starting Mantis VM in the same process.")
-    VmServerApp.main(Array())
+      VmServerApp.main(Array())
   }
 
 }

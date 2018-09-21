@@ -2,6 +2,7 @@ package io.iohk.ethereum.vm
 
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.utils.events._
 
 object ProgramContext {
   def apply[W <: WorldStateProxy[W, S], S <: Storage[S]](
@@ -30,6 +31,22 @@ object ProgramContext {
       evmConfig = evmConfig
     )
   }
+
+  def updateEventWithContext[W <: WorldStateProxy[W, S], S <: Storage[S]](
+    event: EventDSL,
+    context: ProgramContext[W, S]
+  ): EventDSL =
+    event
+      .attribute("ctxCaller", context.callerAddr.toString)
+      .attribute("ctxOrigin", context.originAddr.toString)
+      .attributeIfDefined("ctxRecipient", context.recipientAddr)
+      .attribute("ctxGasPrice", context.gasPrice.toBigInt)
+      .attribute("ctxGasPriceHex", context.gasPrice.toHexString)
+      .attribute("ctxStartGas", context.startGas)
+      .attribute("ctxInputDataSize", context.inputData.size)
+      .attribute("ctxDoTransfer", context.doTransfer)
+      .attribute("ctxCallDepth", context.callDepth)
+      .header(context.blockHeader)
 }
 
 /**

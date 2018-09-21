@@ -7,7 +7,7 @@ import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, ScheduledExecuto
 
 import com.googlecode.protobuf.format.FormatFactory
 import io.iohk.ethereum.buildinfo.MantisBuildInfo
-import io.iohk.ethereum.utils.events.{EventState, EventTag}
+import io.iohk.ethereum.utils.events.{EventState, EventTag, appendService}
 import io.riemann.riemann.Proto.{Event, Msg}
 import io.riemann.riemann.client._
 import org.apache.commons.io.output.StringBuilderWriter
@@ -72,17 +72,17 @@ trait Riemann extends Logger {
   def ok(service: String): EventDSL =
     defaultEvent
       .state(EventState.OK)
-      .service(s"${MantisBuildInfo.name} ${service}")
+      .service(appendService(MantisBuildInfo.name, service))
 
   def warning(service: String): EventDSL =
     defaultEvent
       .state(EventState.Warning)
-      .service(s"${MantisBuildInfo.name} ${service}")
+      .service(appendService(MantisBuildInfo.name, service))
 
   def error(service: String): EventDSL =
     defaultEvent
       .state(EventState.Error)
-      .service(s"${MantisBuildInfo.name} ${service}")
+      .service(appendService(MantisBuildInfo.name, service))
 
   def exception(service: String, t: Throwable): EventDSL = {
     // Format message and stacktrace
@@ -91,7 +91,7 @@ trait Riemann extends Logger {
     t.printStackTrace(pw)
 
     defaultEvent
-      .service(s"${MantisBuildInfo.name} ${service}")
+      .service(appendService(MantisBuildInfo.name, service))
       .state(EventState.Error)
       .tag(EventTag.Exception)
       .tag(t.getClass().getSimpleName())
@@ -101,7 +101,7 @@ trait Riemann extends Logger {
   def critical(service: String): EventDSL =
     defaultEvent
       .state(EventState.Critical)
-      .service(s"${MantisBuildInfo.name} ${service}")
+      .service(appendService(MantisBuildInfo.name, service))
 
 }
 

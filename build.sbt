@@ -187,3 +187,11 @@ jdkPackagerJVMArgs := Seq(
   "-Dlogback.configurationFile=." + sep + "conf" + sep + "logback.xml",
   "-Xss10M"
 )
+
+// "check" that the codebase compiles and adheres to the scala style
+addCommandAlias("check", "; compile; test:compile; ets:compile; snappy:compile; scalastyle; test:scalastyle")
+
+// Also check that we can produce the documentation.
+addCommandAlias("fullCheck", ";check; doc")
+
+addCommandAlias("motherOfAllChecks", ";clean; fullCheck")

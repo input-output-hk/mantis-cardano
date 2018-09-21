@@ -84,7 +84,7 @@ class FastSync(
   def waitingForTargetBlock: Receive = handleCommonMessages orElse {
     case FastSyncTargetBlockSelector.Result(targetBlockHeader) =>
       if (targetBlockHeader.number < 1) {
-        Event.warningStart()
+        Event.warning()
           .description("Unable to start block synchronization in fast mode: target block is less than 1")
           .send()
 

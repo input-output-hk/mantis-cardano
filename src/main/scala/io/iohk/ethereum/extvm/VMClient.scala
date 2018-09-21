@@ -5,6 +5,7 @@ import io.iohk.ethereum.vm.{WorldStateProxy, _}
 import Implicits._
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.utils.events._
 import io.iohk.ethereum.utils.{BlockchainConfig, Logger, VmConfig}
 
 import scala.annotation.tailrec
@@ -17,7 +18,9 @@ class VMClient(
     externalVmConfig: VmConfig.ExternalConfig,
     messageHandler: MessageHandler,
     testMode: Boolean)
-  extends Logger {
+  extends EventSupport with Logger {
+
+  protected def mainService: String = "vmclient"
 
   def sendHello(version: String, blockchainConfig: BlockchainConfig): Unit = {
     val config = BlockchainConfigForEvm(blockchainConfig)
@@ -28,6 +31,11 @@ class VMClient(
     val helloMsg = msg.Hello(version, configMsg)
     messageHandler.sendMessage(helloMsg)
   }
+
+//  def sendHelloAndAwait(version: String, blockchainConfig: BlockchainConfig): Unit = {
+//    sendHello(version, blockchainConfig)
+//    messageHandler.awaitMessage[msg.]
+//  }
 
   def run[W <: WorldStateProxy[W, S], S <: vm.Storage[S]](context: ProgramContext[W, S]): ProgramResult[W, S] = {
     val ctx = buildCallContextMsg(context)
@@ -172,7 +180,9 @@ class VMClient(
     )
 
   def close(): Unit = {
-    messageHandler.close()
+    sendOnException(Event.exceptionClose(_)) {
+      messageHandler.close()
+    }
   }
 
 }
