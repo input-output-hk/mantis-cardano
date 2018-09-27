@@ -12,7 +12,7 @@ import akka.stream.ActorMaterializer
 import akka.util.ByteString
 import io.iohk.ethereum.Fixtures
 import io.iohk.ethereum.domain.{Address, BlockchainImpl, Receipt, TxLogEntry}
-import io.iohk.ethereum.eventbus.event.NewHead
+import io.iohk.ethereum.eventbus.event.{NewHead, NewPendingTransaction}
 import io.iohk.ethereum.utils.ByteUtils
 import org.json4s.JsonAST.{JArray, JString}
 import org.spongycastle.util.encoders.Hex
@@ -178,6 +178,35 @@ class JsonRpcWebsocketServiceSpec extends FlatSpec with Matchers with MockFactor
       (parsedNotification2 \ "result" \ "removed").extract[Boolean] shouldBe true
 
       wsClient.expectNoMessage()
+
+      wsClient.sendCompletion()
+      wsClient.expectCompletion()
+    }
+  }
+
+  it should "handle pending transactions subscription" in new TestSetup {
+    val newPendingTxHash = ByteString(Hex.decode("001122FF"))
+
+    WS("/", wsClient.flow) ~> jsonRpcWebsocketService.websocketRoute ~> check {
+      isWebSocketUpgrade shouldEqual true
+
+      wsClient.sendMessage(
+        s"""{
+           |"jsonrpc":"2.0",
+           |"method": "eth_subscribe",
+           |"params": ["newPendingTransactions", {}],
+           |"id": "1"
+         }""".stripMargin)
+
+      val subscriptionMsg = wsClient.expectMessage()
+      val subscriptionId = (parse(subscriptionMsg.asTextMessage.getStrictText) \ "result").extract[String]
+
+      system.eventStream.publish(NewPendingTransaction(newPendingTxHash))
+
+      val notificationMsg1 = wsClient.expectMessage()
+      val parsedNotification1 = parse(notificationMsg1.asTextMessage.getStrictText)
+      (parsedNotification1 \ "subscription").extract[String] shouldBe subscriptionId
+      (parsedNotification1 \ "result").extract[String] shouldBe s"0x${Hex.toHexString(newPendingTxHash.toArray[Byte])}"
 
       wsClient.sendCompletion()
       wsClient.expectCompletion()

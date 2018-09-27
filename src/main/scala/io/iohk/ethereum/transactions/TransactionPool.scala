@@ -88,6 +88,7 @@ class TransactionPool(txPoolConfig: TxPoolConfig, peerManager: ActorRef,
         (peerManager ? PeerManagerActor.GetPeers).mapTo[Peers].foreach { peers =>
           peers.handshaked.foreach { peer => self ! NotifyPeer(transactionsToAdd, peer) }
         }
+        transactionsToAdd.foreach(tx => context.system.eventStream.publish(NewPendingTransaction(tx.hash)))
       }
 
     case AddOrOverrideTransaction(newStx) =>
@@ -103,6 +104,7 @@ class TransactionPool(txPoolConfig: TxPoolConfig, peerManager: ActorRef,
       (peerManager ? PeerManagerActor.GetPeers).mapTo[Peers].foreach { peers =>
         peers.handshaked.foreach { peer => self ! NotifyPeer(List(newStx), peer) }
       }
+      context.system.eventStream.publish(NewPendingTransaction(newStx.hash))
 
     case NotifyPeer(signedTransactions, peer) =>
       val txsToNotify = signedTransactions
