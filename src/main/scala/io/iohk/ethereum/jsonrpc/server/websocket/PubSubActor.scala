@@ -202,7 +202,7 @@ class PubSubActor(appStateStorage: AppStateStorage, blockchain: Blockchain) exte
 
     //The node is syncing if there's any block that other peers have and this peer doesn't
     val maybeSyncStatus =
-      if(currentBlock < highestBlock)
+      if (currentBlock < highestBlock)
         Some(SyncingStatus(
           startingBlock = appStateStorage.getSyncStartingBlock(),
           currentBlock = currentBlock,
@@ -210,10 +210,12 @@ class PubSubActor(appStateStorage: AppStateStorage, blockchain: Blockchain) exte
         ))
       else None
 
+    val message = maybeSyncStatus.map(Extraction.decompose).getOrElse(JBool(false))
+
     subscriptions.values.flatten
       .collect { case Subscription(id, Syncing, out) => (id, out) }
       .foreach { case (id, out) =>
-        val response = JsonRpcSubscriptionNotification(id, maybeSyncStatus.map(Extraction.decompose).getOrElse(JBool(false)))
+        val response = JsonRpcSubscriptionNotification(id, message)
         out.offer(toMessage(response))
       }
   }
