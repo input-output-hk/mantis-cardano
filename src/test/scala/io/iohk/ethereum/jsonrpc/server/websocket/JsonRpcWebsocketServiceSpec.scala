@@ -11,6 +11,7 @@ import akka.http.scaladsl.testkit._
 import akka.stream.ActorMaterializer
 import akka.util.ByteString
 import io.iohk.ethereum.Fixtures
+import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain.{Address, BlockchainImpl, Receipt, TxLogEntry}
 import io.iohk.ethereum.eventbus.event.{NewHead, NewPendingTransaction}
 import io.iohk.ethereum.utils.ByteUtils
@@ -42,6 +43,8 @@ class JsonRpcWebsocketServiceSpec extends FlatSpec with Matchers with MockFactor
     val block = Fixtures.Blocks.Block3125369.block
 
     (blockchain.getReceiptsByHash _).expects(block.header.hash).returning(Some(Nil))
+    (appStateStorage.getBestBlockNumber _).expects().returning(1)
+    (appStateStorage.getEstimatedHighestBlock _).expects().returning(1)
 
     WS("/", wsClient.flow) ~> jsonRpcWebsocketService.websocketRoute ~> check {
       isWebSocketUpgrade shouldEqual true
@@ -67,6 +70,8 @@ class JsonRpcWebsocketServiceSpec extends FlatSpec with Matchers with MockFactor
     val block = Fixtures.Blocks.Block3125369.block
 
     (blockchain.getReceiptsByHash _).expects(block.header.hash).returning(Some(Nil))
+    (appStateStorage.getBestBlockNumber _).expects().returning(1)
+    (appStateStorage.getEstimatedHighestBlock _).expects().returning(1)
 
     WS("/", wsClient.flow) ~> jsonRpcWebsocketService.websocketRoute ~> check {
       isWebSocketUpgrade shouldEqual true
@@ -101,6 +106,8 @@ class JsonRpcWebsocketServiceSpec extends FlatSpec with Matchers with MockFactor
       TxLogEntry(subscriptionAddress, Seq(), ByteString())) // should not be returned, topics do not match
     val receipts = Seq(Receipt(ByteString(), 0, ByteString(), logs, None, None))
     (blockchain.getReceiptsByHash _).expects(block.header.hash).returning(Some(receipts))
+    (appStateStorage.getBestBlockNumber _).expects().returning(1)
+    (appStateStorage.getEstimatedHighestBlock _).expects().returning(1)
 
     WS("/", wsClient.flow) ~> jsonRpcWebsocketService.websocketRoute ~> check {
       isWebSocketUpgrade shouldEqual true
@@ -143,6 +150,8 @@ class JsonRpcWebsocketServiceSpec extends FlatSpec with Matchers with MockFactor
     val logs = Seq(TxLogEntry(subscriptionAddress, Seq(subscriptionTopic1, subscriptionTopic2), logData))
     val receipts = Seq(Receipt(ByteString(), 0, ByteString(), logs, None, None))
     (blockchain.getReceiptsByHash _).expects(block.header.hash).returning(Some(receipts)).twice()
+    (appStateStorage.getBestBlockNumber _).expects().returning(1)
+    (appStateStorage.getEstimatedHighestBlock _).expects().returning(1)
 
     WS("/", wsClient.flow) ~> jsonRpcWebsocketService.websocketRoute ~> check {
       isWebSocketUpgrade shouldEqual true
@@ -213,11 +222,56 @@ class JsonRpcWebsocketServiceSpec extends FlatSpec with Matchers with MockFactor
     }
   }
 
+  it should "handle syncing subscription" in new TestSetup {
+    val block = Fixtures.Blocks.Block3125369.block
+
+    (blockchain.getReceiptsByHash _).expects(block.header.hash).returning(None).anyNumberOfTimes()
+
+    WS("/", wsClient.flow) ~> jsonRpcWebsocketService.websocketRoute ~> check {
+      isWebSocketUpgrade shouldEqual true
+
+      wsClient.sendMessage(
+        s"""{
+           |"jsonrpc":"2.0",
+           |"method": "eth_subscribe",
+           |"params": ["syncing", {}],
+           |"id": "1"
+         }""".stripMargin)
+
+      val subscriptionMsg = wsClient.expectMessage()
+      val subscriptionId = (parse(subscriptionMsg.asTextMessage.getStrictText) \ "result").extract[String]
+
+      (appStateStorage.getSyncStartingBlock _).expects().returning(2)
+      (appStateStorage.getBestBlockNumber _).expects().returning(5)
+      (appStateStorage.getEstimatedHighestBlock _).expects().returning(10)
+
+      system.eventStream.publish(NewHead(Nil, Seq(block)))
+
+      val notificationMsg1 = wsClient.expectMessage()
+      val parsedNotification1 = parse(notificationMsg1.asTextMessage.getStrictText)
+      (parsedNotification1 \ "subscription").extract[String] shouldBe subscriptionId
+      (parsedNotification1 \ "result" \ "currentBlock").extract[String] shouldBe s"0x5"
+
+      (appStateStorage.getBestBlockNumber _).expects().returning(5)
+      (appStateStorage.getEstimatedHighestBlock _).expects().returning(5)
+      system.eventStream.publish(NewHead(Nil, Seq(block)))
+
+      val notificationMsg2 = wsClient.expectMessage()
+      val parsedNotification2 = parse(notificationMsg2.asTextMessage.getStrictText)
+      (parsedNotification2 \ "subscription").extract[String] shouldBe subscriptionId
+      (parsedNotification2 \ "result").extract[Boolean] shouldBe false
+
+      wsClient.sendCompletion()
+      wsClient.expectCompletion()
+    }
+  }
+
   trait TestSetup extends JsonMethodsImplicits {
     implicit val system = ActorSystem("JsonRpcWebsocketServiceSpec_System")
     implicit val materializer = ActorMaterializer()
 
     val jsonRpcController = mock[JsonRpcController]
+    val appStateStorage = mock[AppStateStorage]
     val config = new JsonRpcWebsocketServerConfig {
       override val enabled: Boolean = true
       override val interface: String = "127.0.0.1"
@@ -225,7 +279,7 @@ class JsonRpcWebsocketServiceSpec extends FlatSpec with Matchers with MockFactor
     }
 
     val blockchain = mock[BlockchainImpl]
-    val jsonRpcWebsocketService = new JsonRpcWebsocketServer(jsonRpcController, blockchain, config)
+    val jsonRpcWebsocketService = new JsonRpcWebsocketServer(jsonRpcController, appStateStorage, blockchain, config)
     val wsClient = WSProbe()
   }
 
