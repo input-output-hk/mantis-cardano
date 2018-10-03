@@ -8,6 +8,7 @@ import akka.http.scaladsl.Http.ServerBinding
 import akka.http.scaladsl.model.ws.Message
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
+import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain.Blockchain
 import io.iohk.ethereum.jsonrpc.server.websocket.JsonRpcWebsocketServer.JsonRpcWebsocketServerConfig
 import io.iohk.ethereum.jsonrpc.JsonRpcController
@@ -16,14 +17,15 @@ import io.iohk.ethereum.utils.Logger
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
-class JsonRpcWebsocketServer(jsonRpcController: JsonRpcController, blockchain: Blockchain, config: JsonRpcWebsocketServerConfig)
+class JsonRpcWebsocketServer(jsonRpcController: JsonRpcController, appStateStorage: AppStateStorage,
+                             blockchain: Blockchain, config: JsonRpcWebsocketServerConfig)
                             (implicit ec: ExecutionContext, system: ActorSystem) extends Logger {
 
   import JsonRpcWebsocketServer._
 
   private implicit val materializer = ActorMaterializer()
 
-  private val pubSubActor = system.actorOf(PubSubActor.props(blockchain))
+  private val pubSubActor = system.actorOf(PubSubActor.props(appStateStorage, blockchain))
 
   private var serverBinding: Option[ServerBinding] = None
 
