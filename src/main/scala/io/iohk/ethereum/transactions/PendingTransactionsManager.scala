@@ -3,6 +3,7 @@ package io.iohk.ethereum.transactions
 import akka.actor.{Actor, ActorRef, Cancellable, Props}
 import akka.util.{ByteString, Timeout}
 import io.iohk.ethereum.domain.SignedTransaction
+import io.iohk.ethereum.eventbus.event.NewPendingTransaction
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.MessageFromPeer
 import io.iohk.ethereum.network.PeerEventBusActor.SubscriptionClassifier.MessageClassifier
 import io.iohk.ethereum.network.PeerEventBusActor.{PeerEvent, PeerSelector, Subscribe, SubscriptionClassifier}
@@ -78,6 +79,7 @@ class PendingTransactionsManager(txPoolConfig: TxPoolConfig, peerManager: ActorR
         (peerManager ? PeerManagerActor.GetPeers).mapTo[Peers].foreach { peers =>
           peers.handshaked.foreach { peer => self ! NotifyPeer(transactionsToAdd, peer) }
         }
+        transactionsToAdd.foreach(tx => context.system.eventStream.publish(NewPendingTransaction(tx.hash)))
       }
 
     case AddOrOverrideTransaction(newStx) =>
@@ -93,6 +95,7 @@ class PendingTransactionsManager(txPoolConfig: TxPoolConfig, peerManager: ActorR
       (peerManager ? PeerManagerActor.GetPeers).mapTo[Peers].foreach { peers =>
         peers.handshaked.foreach { peer => self ! NotifyPeer(List(newStx), peer) }
       }
+      context.system.eventStream.publish(NewPendingTransaction(newStx.hash))
 
     case NotifyPeer(signedTransactions, peer) =>
       val txsToNotify = signedTransactions
