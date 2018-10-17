@@ -56,7 +56,11 @@ abstract class BaseNode extends Node {
   }
 
   private[this] def startJsonRpcWebsocketServer(): Unit = {
-    if (jsonRpcConfig.websocketServerConfig.enabled) jsonRpcWebsocketServer.run()
+    maybeJsonRpcWebsocketServer match {
+      case Right(jsonRpcWebsocketServer) if jsonRpcConfig.websocketServerConfig.enabled => jsonRpcWebsocketServer.run()
+      case Left(error) if jsonRpcConfig.websocketServerConfig.enabled => log.error(error)
+      case _ => //Nothing
+    }
   }
 
   private[this] def startJsonRpcIpcServer(): Unit = {
@@ -132,7 +136,7 @@ abstract class BaseNode extends Node {
       tryAndLogFailure(() => jsonRpcIpcServer.close())
     }
     if (jsonRpcConfig.websocketServerConfig.enabled) {
-      tryAndLogFailure(() => jsonRpcWebsocketServer.close())
+      tryAndLogFailure(() => maybeJsonRpcWebsocketServer.map(_.close()))
     }
 
     tryAndLogFailure(() => metrics.close())

@@ -14,6 +14,7 @@ import ch.megard.akka.http.cors.scaladsl.settings.CorsSettings
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.iohk.ethereum.buildinfo.MantisBuildInfo
 import io.iohk.ethereum.jsonrpc._
+import io.iohk.ethereum.jsonrpc.server.SslSetup.CertificateConfig
 import io.iohk.ethereum.metrics.Metrics
 import io.iohk.ethereum.utils.{ConfigUtils, JsonUtils, Logger}
 import org.json4s.JsonAST.{JInt, JString}
@@ -191,9 +192,7 @@ object JsonRpcHttpServer extends Logger {
     enabled: Boolean,
     interface: String,
     port: Int,
-    certificateKeyStorePath: Option[String],
-    certificateKeyStoreType: Option[String],
-    certificatePasswordFile: Option[String],
+    certificateConfig: Option[CertificateConfig],
     corsAllowedOrigins: HttpOriginRange,
     maxContentLength: Long
   )
@@ -203,6 +202,12 @@ object JsonRpcHttpServer extends Logger {
 
     def apply(mantisConfig: TypesafeConfig): JsonRpcHttpServerConfig = {
       val rpcHttpConfig = mantisConfig.getConfig("network.rpc.http")
+
+      val maybeCertificateConfig = for {
+        certificateKeyStorePath <- Try(rpcHttpConfig.getString("certificate-keystore-path")).toOption
+        certificateKeyStoreType <- Try(rpcHttpConfig.getString("certificate-keystore-type")).toOption
+        certificatePasswordFile <- Try(rpcHttpConfig.getString("certificate-password-file")).toOption
+      } yield CertificateConfig(certificateKeyStorePath, certificateKeyStoreType, certificatePasswordFile)
 
       JsonRpcHttpServerConfig(
         mode = rpcHttpConfig.getString("mode"),
@@ -214,9 +219,7 @@ object JsonRpcHttpServer extends Logger {
 
         maxContentLength = rpcHttpConfig.getBytes("max-content-length"),
 
-        certificateKeyStorePath = Try(rpcHttpConfig.getString("certificate-keystore-path")).toOption,
-        certificateKeyStoreType = Try(rpcHttpConfig.getString("certificate-keystore-type")).toOption,
-        certificatePasswordFile = Try(rpcHttpConfig.getString("certificate-password-file")).toOption
+        certificateConfig = maybeCertificateConfig
       )
     }
   }
