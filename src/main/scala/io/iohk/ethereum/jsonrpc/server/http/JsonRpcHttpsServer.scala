@@ -21,6 +21,11 @@ class JsonRpcHttpsServer(_jsonRpcController: JsonRpcController, config: JsonRpcH
                          secureRandom: SecureRandom)(implicit val actorSystem: ActorSystem)
   extends JsonRpcHttpServer with Logger {
 
+  require(config.certificateConfig.isDefined,
+    "HTTPS requires: certificate-keystore-path, certificate-keystore-type and certificate-password-file to be configured")
+
+  override val certificateConfig = config.certificateConfig.get
+
   val dispatcherIdPath: String = JsonRpcHttpServer.JsonRpcHttpDispatcherId.configPath
 
   implicit val routeExecutionContext: ExecutionContextExecutor = actorSystem.dispatchers.lookup(dispatcherIdPath)

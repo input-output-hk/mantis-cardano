@@ -14,6 +14,7 @@ import io.iohk.ethereum.Fixtures
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain.{Address, BlockchainImpl, Receipt, TxLogEntry}
 import io.iohk.ethereum.eventbus.event.{NewHead, NewPendingTransaction}
+import io.iohk.ethereum.jsonrpc.server.SslSetup
 import io.iohk.ethereum.utils.ByteUtils
 import org.json4s.JsonAST.{JArray, JString}
 import org.spongycastle.util.encoders.Hex
@@ -276,10 +277,15 @@ class JsonRpcWebsocketServiceSpec extends FlatSpec with Matchers with MockFactor
       override val enabled: Boolean = true
       override val interface: String = "127.0.0.1"
       override val port: Int = 9000
+      override val mode: String = "http"
+      override val certificateConfig: Option[SslSetup.CertificateConfig] = None
     }
 
     val blockchain = mock[BlockchainImpl]
-    val jsonRpcWebsocketService = new JsonRpcWebsocketServer(jsonRpcController, appStateStorage, blockchain, config)
+    val jsonRpcWebsocketService = new BasicJsonRpcWebsocketServer(jsonRpcController, blockchain, appStateStorage, config) {
+      override def run(): Unit = ??? // unused
+      override def close(): Unit = ??? // unuused
+    }
     val wsClient = WSProbe()
   }
 

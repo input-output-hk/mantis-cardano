@@ -5,6 +5,7 @@ import java.time.Clock
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.agent.Agent
+import akka.stream.ActorMaterializer
 import io.iohk.ethereum.blockchain.data.GenesisDataLoader
 import io.iohk.ethereum.blockchain.sync.{BlockchainHostActor, SyncController}
 import io.iohk.ethereum.consensus._
@@ -59,7 +60,8 @@ trait FilterConfigBuilder {
   lazy val filterConfig = FilterConfig(Config.config)
 }
 
-trait NodeKeyBuilder {
+trait
+NodeKeyBuilder {
   self: SecureRandomBuilder =>
   lazy val nodeKey = loadAsymmetricCipherKeyPair(Config.nodeKeyFile, secureRandom)
 }
@@ -371,10 +373,13 @@ trait JSONRpcHttpServerBuilder {
 }
 
 trait JSONRpcWebsocketServerBuilder {
-  self: ActorSystemBuilder with JSONRpcControllerBuilder with JSONRpcConfigBuilder with BlockchainBuilder with StorageBuilder =>
+  self: ActorSystemBuilder with JSONRpcControllerBuilder with JSONRpcConfigBuilder with BlockchainBuilder
+    with SecureRandomBuilder with StorageBuilder =>
 
-  lazy val jsonRpcWebsocketServer = new JsonRpcWebsocketServer(jsonRpcController, storagesInstance.storages.appStateStorage,
-    blockchain, jsonRpcConfig.websocketServerConfig)
+  implicit val materializer = ActorMaterializer()
+
+  lazy val maybeJsonRpcWebsocketServer = JsonRpcWebsocketServer(jsonRpcController, blockchain,
+    storagesInstance.storages.appStateStorage, jsonRpcConfig.websocketServerConfig, secureRandom)
 }
 
 trait JSONRpcIpcServerBuilder {

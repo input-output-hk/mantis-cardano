@@ -113,9 +113,7 @@ class JsonRpcHttpServerSpec extends FlatSpec with Matchers with ScalatestRouteTe
       enabled = true,
       interface = "",
       port = 123,
-      certificateKeyStorePath = None,
-      certificateKeyStoreType = None,
-      certificatePasswordFile = None,
+      certificateConfig = None,
       corsAllowedOrigins = HttpOriginRange.*,
       maxContentLength = 10L * 1024L
     )
