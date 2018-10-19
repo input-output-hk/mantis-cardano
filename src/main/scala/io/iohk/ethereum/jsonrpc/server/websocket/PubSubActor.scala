@@ -7,13 +7,15 @@ import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.stream.scaladsl.SourceQueueWithComplete
 import akka.util.ByteString
 import io.iohk.ethereum.crypto
+import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain.{Address, Block, Blockchain}
 import io.iohk.ethereum.eventbus.event.{NewHead, NewPendingTransaction}
+import io.iohk.ethereum.jsonrpc.EthService.SyncingStatus
 import io.iohk.ethereum.jsonrpc.FilterManager.TxLog
 import io.iohk.ethereum.jsonrpc._
 import io.iohk.ethereum.utils.ByteUtils
 import org.json4s.{Extraction, JValue}
-import org.json4s.JsonAST.{JObject, JString}
+import org.json4s.JsonAST.{JBool, JObject, JString}
 import org.json4s.JsonDSL._
 import org.json4s.native.JsonMethods.{compact, render}
 import org.spongycastle.util.encoders.Hex
@@ -21,7 +23,8 @@ import org.spongycastle.util.encoders.Hex
 import scala.util.Try
 
 object PubSubActor {
-  def props(blockchain: Blockchain): Props = Props(new PubSubActor(blockchain))
+  def props(appStateStorage: AppStateStorage, blockchain: Blockchain): Props =
+    Props(new PubSubActor(appStateStorage, blockchain))
 
   val JsonRpcVersion = "2.0"
 
@@ -36,6 +39,7 @@ object PubSubActor {
   case class NewHeads(includeTransactions: Boolean) extends SubscriptionType
   case class Logs(address: Option[Address], topics: Option[Seq[ByteString]]) extends SubscriptionType
   case object NewPendingTransactions extends SubscriptionType
+  case object Syncing extends SubscriptionType
 
   case class Subscribe(connectionId: String, req: JsonRpcRequest, out: SourceQueueWithComplete[Message])
   case class Unsubscribe(connectionId: String, req: JsonRpcRequest)
@@ -44,9 +48,10 @@ object PubSubActor {
   val NewHeadsSubscription = "newHeads"
   val LogsSubscription = "logs"
   val NewPendingTransactionsSubscription = "newPendingTransactions"
+  val SyncingSubscription = "syncing"
 }
 
-class PubSubActor(blockchain: Blockchain) extends Actor with JsonMethodsImplicits {
+class PubSubActor(appStateStorage: AppStateStorage, blockchain: Blockchain) extends Actor with JsonMethodsImplicits {
 
   import PubSubActor._
 
@@ -95,6 +100,11 @@ class PubSubActor(blockchain: Blockchain) extends Actor with JsonMethodsImplicit
         subscriptions += (connectionId -> (existingSubscriptions + newSubscription))
         out.offer(toMessage(JsonRpcResponse(JsonRpcVersion, Some(subscriptionId), None, req.id)))
 
+      case Some(SyncingSubscription) =>
+        val newSubscription = Subscription(subscriptionId, Syncing, out)
+        subscriptions += (connectionId -> (existingSubscriptions + newSubscription))
+        out.offer(toMessage(JsonRpcResponse(JsonRpcVersion, Some(subscriptionId), None, req.id)))
+
       case _ =>
         val response = JsonRpcResponse(JsonRpcVersion, None, Some(JsonRpcErrors.InvalidParams("Subscription not supported: " + req.params)), req.id)
         out.offer(toMessage(response))
@@ -117,6 +127,7 @@ class PubSubActor(blockchain: Blockchain) extends Actor with JsonMethodsImplicit
     processNewHeadsSubscriptions(blocksAdded)
     processRemovedLogs(blocksRemoved)
     processNewLogs(blocksAdded)
+    processSyncingSubscriptions()
   }
 
   private def handleNewPendingTransaction(transactionHash: ByteString): Unit = {
@@ -183,6 +194,30 @@ class PubSubActor(blockchain: Blockchain) extends Actor with JsonMethodsImplicit
     logs.address.forall(_ == log.address) &&
       logs.topics.forall(topics => log.topics.length >= topics.length) &&
       logs.topics.forall { topics => (topics zip log.topics).forall { case (a, b) => a == b } }
+  }
+
+  private def processSyncingSubscriptions(): Unit = {
+    val currentBlock = appStateStorage.getBestBlockNumber()
+    val highestBlock = appStateStorage.getEstimatedHighestBlock()
+
+    //The node is syncing if there's any block that other peers have and this peer doesn't
+    val maybeSyncStatus =
+      if (currentBlock < highestBlock)
+        Some(SyncingStatus(
+          startingBlock = appStateStorage.getSyncStartingBlock(),
+          currentBlock = currentBlock,
+          highestBlock = highestBlock
+        ))
+      else None
+
+    val message = maybeSyncStatus.map(Extraction.decompose).getOrElse(JBool(false))
+
+    subscriptions.values.flatten
+      .collect { case Subscription(id, Syncing, out) => (id, out) }
+      .foreach { case (id, out) =>
+        val response = JsonRpcSubscriptionNotification(id, message)
+        out.offer(toMessage(response))
+      }
   }
 
   private def toMessage(any: Any): TextMessage = {
