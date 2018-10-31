@@ -42,7 +42,6 @@ trait Riemann extends Logger {
           } catch {
             case e: IOException =>
               log.error("failed to create riemann batch client, falling back to stdout client", e)
-              System.exit(1)
               stdoutClient()
           }
         }
@@ -201,7 +200,7 @@ class RiemannBatchClient(config: RiemannConfiguration) extends IRiemannClient wi
   private var sendExecutor: ScheduledExecutorService = null
 
   private def tryConnect(times: Int): Unit = {
-    if (times < 5) {
+    if (times < 1) {
       try {
         client.reconnect()
       } catch {
