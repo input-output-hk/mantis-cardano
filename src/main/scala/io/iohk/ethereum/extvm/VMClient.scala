@@ -5,9 +5,12 @@ import io.iohk.ethereum.vm.{WorldStateProxy, _}
 import Implicits._
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.extvm.msg.{CallResult, VMQuery}
+import io.iohk.ethereum.utils.events.EventSupport
 import io.iohk.ethereum.utils.{BlockchainConfig, Logger, VmConfig}
 
 import scala.annotation.tailrec
+import scala.util.{Failure, Success, Try}
 
 /**
   * @param testMode - if enabled the client will send blockchain configuration with each configuration.
@@ -17,7 +20,9 @@ class VMClient(
     externalVmConfig: VmConfig.ExternalConfig,
     messageHandler: MessageHandler,
     testMode: Boolean)
-  extends Logger {
+  extends Logger with EventSupport {
+
+  protected def mainService: String = "vmclient"
 
   def sendHello(version: String, blockchainConfig: BlockchainConfig): Unit = {
     val config = BlockchainConfigForEvm(blockchainConfig)
@@ -42,54 +47,71 @@ class VMClient(
   private def messageLoop[W <: WorldStateProxy[W, S], S <: vm.Storage[S]](world: W): msg.CallResult = {
     import msg.VMQuery.Query
 
-    val nextMsg = messageHandler.awaitMessage[msg.VMQuery]
+    val resultE: Either[CallResult, VMQuery] =
+      Try(messageHandler.awaitMessage[msg.VMQuery]) match {
+        case Success(vmQuery) ⇒
+          Right(vmQuery)
 
-    nextMsg.query match {
-      case Query.CallResult(res) =>
-        log.debug("Client received msg: CallResult")
-        res
+        case Failure(exception) ⇒
+          Event.exception("messageLoop", exception).send()
+          Left(msg.CallResult(
+            error = true,
+            returnCode = com.google.protobuf.ByteString.copyFromUtf8(exception.toString)
+          ))
+      }
 
-      case Query.GetAccount(msg.GetAccount(address)) =>
-        log.debug("Client received msg: GetAccount")
-        val accountMsg = world.getAccount(address) match {
-          case Some(acc) =>
-            msg.Account(
-              nonce = acc.nonce,
-              balance = acc.balance,
-              codeEmpty = acc.codeHash == Account.EmptyCodeHash
-            )
+    resultE match {
+      case Left(callResult) ⇒
+        callResult
 
-          case None =>
-            msg.Account(codeEmpty = true)
+      case Right(nextMsg) ⇒
+        nextMsg.query match {
+          case Query.CallResult(res) =>
+            log.debug("Client received msg: CallResult")
+            res
+
+          case Query.GetAccount(msg.GetAccount(address)) =>
+            log.debug("Client received msg: GetAccount")
+            val accountMsg = world.getAccount(address) match {
+              case Some(acc) =>
+                msg.Account(
+                  nonce = acc.nonce,
+                  balance = acc.balance,
+                  codeEmpty = acc.codeHash == Account.EmptyCodeHash
+                )
+
+              case None =>
+                msg.Account(codeEmpty = true)
+            }
+            messageHandler.sendMessage(accountMsg)
+            messageLoop[W, S](world)
+
+          case Query.GetStorageData(msg.GetStorageData(address, offset)) =>
+            log.debug("Client received msg: GetStorageData")
+            val value = world.getStorage(address).load(offset)
+            val storageDataMsg = msg.StorageData(data = value)
+            messageHandler.sendMessage(storageDataMsg)
+            messageLoop[W, S](world)
+
+          case Query.GetCode(msg.GetCode(address)) =>
+            log.debug("Client received msg: GetCode")
+            val codeMsg = msg.Code(world.getCode(address))
+            messageHandler.sendMessage(codeMsg)
+            messageLoop[W, S](world)
+
+          case Query.GetBlockhash(msg.GetBlockhash(offset)) =>
+            log.debug("Client received msg: GetBlockhash")
+            val blockhashMsg = world.getBlockHash(offset) match {
+              case Some(value) => msg.Blockhash(hash = value)
+              case None => msg.Blockhash()
+            }
+            messageHandler.sendMessage(blockhashMsg)
+            messageLoop[W, S](world)
+
+          case Query.Empty =>
+            log.debug("Client received msg: Empty")
+            messageLoop[W, S](world)
         }
-        messageHandler.sendMessage(accountMsg)
-        messageLoop[W, S](world)
-
-      case Query.GetStorageData(msg.GetStorageData(address, offset)) =>
-        log.debug("Client received msg: GetStorageData")
-        val value = world.getStorage(address).load(offset)
-        val storageDataMsg = msg.StorageData(data = value)
-        messageHandler.sendMessage(storageDataMsg)
-        messageLoop[W, S](world)
-
-      case Query.GetCode(msg.GetCode(address)) =>
-        log.debug("Client received msg: GetCode")
-        val codeMsg = msg.Code(world.getCode(address))
-        messageHandler.sendMessage(codeMsg)
-        messageLoop[W, S](world)
-
-      case Query.GetBlockhash(msg.GetBlockhash(offset)) =>
-        log.debug("Client received msg: GetBlockhash")
-        val blockhashMsg = world.getBlockHash(offset) match {
-          case Some(value) => msg.Blockhash(hash = value)
-          case None => msg.Blockhash()
-        }
-        messageHandler.sendMessage(blockhashMsg)
-        messageLoop[W, S](world)
-
-      case Query.Empty =>
-        log.debug("Client received msg: Empty")
-        messageLoop[W, S](world)
     }
   }
 
