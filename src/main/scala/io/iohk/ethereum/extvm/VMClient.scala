@@ -43,10 +43,19 @@ class VMClient(
   }
 
   // scalastyle:off method.length
+  // scalastyle:off magic.number
   @tailrec
   private def messageLoop[W <: WorldStateProxy[W, S], S <: vm.Storage[S]](world: W): msg.CallResult = {
     import msg.VMQuery.Query
 
+    // We compute:
+    //   * either a direct `CallResult`, in which case we will return it with
+    //     no other computation happening,
+    //   * or a `VMQuery`, which is further processed and may cause more interaction
+    //     with the VM.
+    // The former happens only when there is an exception in the Mantis-VM communication,
+    // as expressed in the outcome of the `awaitMessage` call: So e.g. there may be a timeout
+    // in the underlying `Future`.
     val resultE: Either[CallResult, VMQuery] =
       Try(messageHandler.awaitMessage[msg.VMQuery]) match {
         case Success(vmQuery) ⇒
@@ -54,10 +63,17 @@ class VMClient(
 
         case Failure(exception) ⇒
           Event.exception("messageLoop", exception).send()
-          Left(msg.CallResult(
-            error = true,
-            returnCode = com.google.protobuf.ByteString.copyFromUtf8(exception.toString)
-          ))
+          val gasRemaining = BigInt(0)  // FIXME How does this value affect other code paths?
+          val gasRefund = BigInt(0)     // FIXME How does this value affect other code paths?
+
+          val errorCallResult =
+            ErrorCallResult(
+              returnCode = AwaitMessageFailureCode,
+              gasRemaining = gasRemaining,
+              gasRefund = gasRefund
+            )
+
+          Left(errorCallResult)
       }
 
     resultE match {
