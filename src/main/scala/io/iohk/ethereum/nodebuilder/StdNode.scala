@@ -78,6 +78,7 @@ abstract class BaseNode extends Node {
       Config.healthIntervalMilliseconds,
       TimeUnit.MILLISECONDS,
       () => {
+        // FIXME Buildinfo is static and known at build time, no need to resend.
         Riemann.ok("health buildinfo")
           .attributes(MantisBuildInfo.toMap.mapValues { v => v.toString() }.asJava)
           .send()
