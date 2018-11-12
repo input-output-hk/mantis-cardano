@@ -20,6 +20,8 @@ package object events {
 
     def peerId(peerId: PeerId): EventDSL = event.attribute(EventAttr.PeerId, peerId.value)
 
+    def update(f: EventDSL ⇒ EventDSL): EventDSL = f(event)
+
     def header(header: BlockHeader): EventDSL =
       event
         .attribute("header", header.number)
@@ -65,6 +67,7 @@ package object events {
     final val Id = "id"
     final val PeerId = "peerId"
     final val Resource = "resource"
+    final val IP = "ip"
     final val Status = "status"
     final val ThreadId = "threadId"
     final val ThreadName = "threadName"
@@ -73,5 +76,6 @@ package object events {
     final val TimeUnit = "timeUnit"
     final val Type = "type"
     final val Unit = "unit"
+    final val Uuid = "uuid"
   }
 }

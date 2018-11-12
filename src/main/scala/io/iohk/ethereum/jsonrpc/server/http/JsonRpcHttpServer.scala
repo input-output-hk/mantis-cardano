@@ -1,6 +1,7 @@
 package io.iohk.ethereum.jsonrpc.server.http
 
 import java.security.SecureRandom
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
@@ -15,6 +16,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.iohk.ethereum.buildinfo.MantisBuildInfo
 import io.iohk.ethereum.jsonrpc._
 import io.iohk.ethereum.metrics.Metrics
+import io.iohk.ethereum.utils.events._
 import io.iohk.ethereum.utils.{ConfigUtils, JsonUtils, Logger}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.{DefaultFormats, native}
@@ -24,12 +26,14 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}
 
-trait JsonRpcHttpServer extends Json4sSupport with Logger {
+trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
   val jsonRpcController: JsonRpcController
 
   implicit val serialization = native.Serialization
 
   implicit val formats = DefaultFormats
+
+  protected def mainService: String = "jsonrpc http"
 
   def corsAllowedOrigins: HttpOriginRange
   def maxContentLength: Long
@@ -146,15 +150,48 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger {
 
   private def handleRequest(request: JsonRpcRequest) = extractClientIP { ip =>
     complete {
-      val requestId = request.id.flatMap(_.extractOpt[String]).getOrElse("n/a")
+      val requestIdOpt = request.id.flatMap(_.extractOpt[String])
+      val requestId = requestIdOpt.getOrElse("")
+
+      val requestJson = serialization.write(request)
+      val requestUUid = UUID.randomUUID().toString
+      val ipAddressOrEmpty = ip.toOption.map(_.getHostAddress).getOrElse("")
+
+      def updateEvent(event: EventDSL): EventDSL =
+        event
+          .attribute(EventAttr.Uuid, requestUUid)
+          .tag(requestUUid)
+          .attribute("_ip_", ip.toString())
+          .attribute(EventAttr.IP, ipAddressOrEmpty)
+          .attribute(EventAttr.Id, requestIdOpt.getOrElse(""))
+          .attribute("requestObj", request.toString)
+          .attribute("requestJson", requestJson)
+
+      Event.okStart() // FIXME we need an extra string here to designate we are in "handleRequest"
+        .update(updateEvent)
+        .send()
 
       log.info(s"Processing new JSON RPC request [$requestId] from [$ip]:\n ${serialization.write(request)}")
 
       val responseF = jsonRpcController.handleRequest(request)
 
       responseF.andThen {
-        case Success(_) => log.info(s"Request [$requestId] successful")
-        case Failure(ex) => log.error(s"Request [$requestId] failed", ex)
+        case Success(response) =>
+          val responseJson = serialization.write(response)
+          Event.okFinish()
+            .update(updateEvent)
+            .attribute("responseObj", response.toString)
+            .attribute("responseJson", responseJson)
+            .send()
+
+          log.info(s"Request [$requestId] successful")
+
+        case Failure(ex) =>
+          Event.exceptionFinish(ex)
+            .update(updateEvent)
+            .send()
+
+          log.error(s"Request [$requestId] failed", ex)
       }
     }
   }
