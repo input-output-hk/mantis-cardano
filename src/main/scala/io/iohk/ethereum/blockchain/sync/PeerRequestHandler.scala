@@ -29,6 +29,7 @@ class PeerRequestHandler[RequestMsg <: Message, ResponseMsg <: Message : ClassTa
   def timeTakenSoFar(): Long = System.currentTimeMillis() - startTime
 
   override def preStart(): Unit = {
+    log.debug(s"Sending request $requestMsg to peer ${peer.id}")
     etcPeerManager ! EtcPeerManagerActor.SendMessage(toSerializable(requestMsg), peer.id)
     peerEventBus ! Subscribe(PeerDisconnectedClassifier(PeerSelector.WithId(peer.id)))
     peerEventBus ! Subscribe(subscribeMessageClassifier)
@@ -41,11 +42,14 @@ class PeerRequestHandler[RequestMsg <: Message, ResponseMsg <: Message : ClassTa
   }
 
   def handleResponseMsg(responseMsg: ResponseMsg): Unit = {
+    log.debug(s"Received a response message $responseMsg from peer ${peer.id}")
     cleanupAndStop()
     initiator ! ResponseReceived(peer, responseMsg, timeTaken = timeTakenSoFar())
   }
 
   def handleTimeout(): Unit = {
+    log.debug(s"Timeout occurred while waiting for response from peer ${peer.id}")
+
     cleanupAndStop()
     initiator ! RequestFailed(peer, "request timeout")
   }
