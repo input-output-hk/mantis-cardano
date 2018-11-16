@@ -11,6 +11,7 @@ import io.iohk.ethereum.network.{PeerManagerActor, ServerActor}
 import io.iohk.ethereum.testmode.{TestLedgerBuilder, TestmodeConsensusBuilder}
 import io.iohk.ethereum.utils.{Config, JsonUtils, Scheduler}
 
+import scala.annotation.tailrec
 import scala.concurrent.Await
 import scala.util.{Failure, Success, Try}
 
@@ -85,6 +86,9 @@ abstract class BaseNode extends Node {
   }
 
   def start(): Unit = {
+
+    fixBestBlock()
+
     logBuildInfo()
 
     startMetrics()
@@ -107,6 +111,21 @@ abstract class BaseNode extends Node {
 
     startJsonRpcHttpServer()
     startJsonRpcIpcServer()
+  }
+
+  // scalastyle:off
+  private def fixBestBlock(): Unit = {
+    @tailrec
+    def recur(currentNumber: BigInt): Unit = {
+      println(s"Checking if block $currentNumber is present in the database")
+      if (blockchain.getBlockByNumber(currentNumber).isDefined) {
+        println(s"Savings $currentNumber as best block")
+        blockchain.saveBestBlockNumber(currentNumber)
+      } else recur(currentNumber - 1)
+    }
+
+    println("Applying a fix for bestBlockNumber")
+    recur(blockchain.getBestBlockNumber())
   }
 
   override def shutdown(): Unit = {
