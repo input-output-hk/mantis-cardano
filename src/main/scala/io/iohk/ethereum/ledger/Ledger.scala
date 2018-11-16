@@ -125,15 +125,19 @@ class LedgerImpl(
         }
 
         else {
+          log.debug(s"Trying to import block (num ${block.header.number}. Best block number is: ${blockchain.getBestBlockNumber()}")
           val bestBlock = blockchain.getBestBlock()
           val currentTd = blockchain.getTotalDifficultyByHash(bestBlock.header.hash).get
 
           val isTopOfChain = block.header.parentHash == bestBlock.header.hash
 
-          if (isTopOfChain)
+          if (isTopOfChain) {
+            log.debug("Importing block to top of the chain")
             importBlockToTop(block, bestBlock.header.number, currentTd)
-          else
+          } else {
+            log.debug("Not importing block to top of the chain. Enqueueing or reorganizing")
             enqueueBlockOrReorganiseChain(block, bestBlock, currentTd)
+          }
         }
     }
   }
