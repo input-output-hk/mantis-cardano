@@ -201,7 +201,7 @@ class RegularSync(
 
           case Failure(ex) =>
             Event.exception("block new", ex).send()
-            throw ex
+            scheduleResume()
         }
       }
   }
@@ -364,7 +364,7 @@ class RegularSync(
             Event.exception("mined block", ex)
               .metric(block.header.number.longValue)
               .send()
-            throw ex
+            scheduleResume()
         }
 
       } else {
@@ -619,7 +619,7 @@ class RegularSync(
             (importedBlocks, Some(missingNodeEx))
 
           case Failure(ex) =>
-            throw ex
+            (importedBlocks, Some(ex))
         }
     }
 
