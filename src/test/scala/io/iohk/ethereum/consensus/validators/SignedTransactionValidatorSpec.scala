@@ -9,11 +9,12 @@ import io.iohk.ethereum.consensus.validators.std.StdSignedTransactionValidator
 import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.utils.VmConfig.{ExternalConfig, VmMode}
-import io.iohk.ethereum.utils.{BlockchainConfig, Config, VmConfig}
+import io.iohk.ethereum.utils.{BlockchainConfig, Config, RetryConfig, VmConfig}
 import io.iohk.ethereum.vm.EvmConfig
 import io.iohk.ethereum.{Fixtures, crypto}
 import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
+import scala.concurrent.duration._
 
 class SignedTransactionValidatorSpec extends FlatSpec with Matchers {
 
@@ -239,7 +240,7 @@ class SignedTransactionValidatorSpec extends FlatSpec with Matchers {
 
   it should "report as invalid a iele tx with non-rlp payload" in {
     val stxValidator = new StdSignedTransactionValidator(blockchainConfig, VmConfig(VmMode.External,
-      Some(ExternalConfig(ExternalConfig.VmTypeIele, false, None, "", 0))))
+      Some(ExternalConfig(ExternalConfig.VmTypeIele, false, None, "", 0, RetryConfig(0, 1.second)))))
 
     val keyPair = crypto.generateKeyPair(new SecureRandom)
     val tx = txAfterHomestead.copy(payload = ByteString())
@@ -257,7 +258,7 @@ class SignedTransactionValidatorSpec extends FlatSpec with Matchers {
 
   it should "report as value a iele tx with expected rlp payload" in {
     val stxValidator = new StdSignedTransactionValidator(blockchainConfig, VmConfig(VmMode.External,
-      Some(ExternalConfig(ExternalConfig.VmTypeIele, false, None, "", 0))))
+      Some(ExternalConfig(ExternalConfig.VmTypeIele, false, None, "", 0, RetryConfig(0, 1.second)))))
 
     val keyPair = crypto.generateKeyPair(new SecureRandom)
     val tx = txAfterHomestead.copy(gasLimit = 22000,

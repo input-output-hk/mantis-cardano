@@ -6,25 +6,30 @@ import akka.actor.ActorSystem
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import akka.stream.scaladsl.{Framing, Keep, Sink, SinkQueueWithCancel, Source, SourceQueueWithComplete, Tcp}
 import akka.util.ByteString
+import atmos.dsl._
+import Slf4jSupport._
 import io.iohk.ethereum.ledger.{InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage}
-import io.iohk.ethereum.utils.{BlockchainConfig, VmConfig}
+import io.iohk.ethereum.utils.{BlockchainConfig, Logger, VmConfig}
 import io.iohk.ethereum.vm._
 
-import scala.annotation.tailrec
-import scala.util.{Failure, Success, Try}
-
 class ExtVMInterface(externaVmConfig: VmConfig.ExternalConfig, blockchainConfig: BlockchainConfig, testMode: Boolean)(implicit system: ActorSystem)
-  extends VM[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage]{
+  extends VM[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage] with Logger {
 
   private implicit val materializer = ActorMaterializer()
+
+  private implicit val retryPolicy = retryFor(externaVmConfig.retry.times.attempts)
+    .using(linearBackoff(externaVmConfig.retry.delay))
+    .monitorWith(log onRetrying logWarning onAborted logError onInterrupted logError)
+    .onError { case _ =>
+      close()
+      keepRetrying
+    }
 
   private var out: Option[SourceQueueWithComplete[ByteString]] = None
 
   private var in: Option[SinkQueueWithCancel[ByteString]] = None
 
   private var vmClient: Option[VMClient] = None
-
-  initConnection()
 
   private def initConnection(): Unit = {
     close()
@@ -48,19 +53,15 @@ class ExtVMInterface(externaVmConfig: VmConfig.ExternalConfig, blockchainConfig:
     vmClient = Some(client)
   }
 
-  override final def run(context: PC): PR =
-    synchronized(innerRun(context))
-
-  @tailrec
-  private def innerRun(context: PC): PR = {
-    if (vmClient.isEmpty) initConnection()
-
-    Try(vmClient.get.run(context)) match {
-      case Success(res) => res
-      case Failure(ex) =>
-        ex.printStackTrace()
-        initConnection()
-        innerRun(context)
+  /**
+    * Runs a program on the VM.
+    * Note: exceptions are handled by retrying the connection. If it still fails then users of this class are expected
+    * to handle the exception.
+    */
+  override final def run(context: PC): PR = synchronized {
+    retry(s"External VM call") {
+      if (vmClient.isEmpty) initConnection()
+      vmClient.get.run(context)
     }
   }
 

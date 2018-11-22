@@ -409,7 +409,13 @@ object VmConfig {
     val supportedVmTypes = Set(VmTypeIele, VmTypeKevm, VmTypeMantis)
   }
 
-  case class ExternalConfig(vmType: String, runVm: Boolean, executablePath: Option[String], host: String, port: Int)
+  case class ExternalConfig(
+    vmType: String,
+    runVm: Boolean,
+    executablePath: Option[String],
+    host: String,
+    port: Int,
+    retry: RetryConfig)
 
   def apply(mpConfig: TypesafeConfig): VmConfig = {
     def parseExternalConfig(): ExternalConfig = {
@@ -424,7 +430,9 @@ object VmConfig {
         runVm = extConf.getBoolean("run-vm"),
         executablePath = Try(extConf.getString("executable-path")).toOption,
         host = extConf.getString("host"),
-        port = extConf.getInt("port"))
+        port = extConf.getInt("port"),
+        retry = RetryConfig(extConf.getConfig("retry"))
+      )
     }
 
     mpConfig.getString("vm.mode") match {
@@ -434,3 +442,13 @@ object VmConfig {
     }
   }
 }
+
+
+object RetryConfig {
+  def apply(retryConfig: TypesafeConfig): RetryConfig =
+    RetryConfig(
+      times = retryConfig.getInt("times"),
+      delay = retryConfig.getDuration("delay").toMillis.millis)
+}
+
+case class RetryConfig(times: Int, delay: FiniteDuration)

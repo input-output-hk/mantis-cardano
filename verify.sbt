@@ -105,7 +105,8 @@ verifyDependencies in verify ++= Seq(
   "io.netty" % "netty-buffer" sha1 "d6c2d13492778009d33f60e05ed90bcb535d1fd1",
   "io.netty" % "netty-common" sha1 "df69ce8bb9b544a71e7bbee290253cf7c93e6bad",
   "io.netty" % "netty-resolver" sha1 "f33557dcb31fa20da075ac05e4808115e32ef9b7",
-  "io.netty" % "netty-handler" sha1 "a035784682da0126bc25f10713dac732b5082a6d"
+  "io.netty" % "netty-handler" sha1 "a035784682da0126bc25f10713dac732b5082a6d",
+  "io.paradoxical" % "atmos" sha1 "149e33d331203306394bc95f5e9676e1eb05e65d"
 )
 
 verifyOptions in verify := VerifyOptions(

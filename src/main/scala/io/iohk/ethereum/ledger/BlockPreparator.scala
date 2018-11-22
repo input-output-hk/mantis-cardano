@@ -7,9 +7,10 @@ import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ledger.BlockExecutionError.{StateBeforeFailure, TxsExecutionError}
 import io.iohk.ethereum.ledger.Ledger._
 import io.iohk.ethereum.utils.{BlockchainConfig, Logger}
-import io.iohk.ethereum.vm.{PC ⇒ _, _}
+import io.iohk.ethereum.vm.{PC => _, _}
 
 import scala.annotation.tailrec
+import scala.util.{Failure, Success, Try}
 
 /**
  * This is used from a [[io.iohk.ethereum.consensus.blocks.BlockGenerator BlockGenerator]].
@@ -223,6 +224,7 @@ class BlockPreparator(
     TxResult(world2, executionGasToPayToMiner, resultWithErrorHandling.logs, result.returnData, result.error)
   }
 
+  //scalastyle:off method.length
   /**
    * This functions executes all the signed transactions from a block (till one of those executions fails)
    *
@@ -256,30 +258,36 @@ class BlockPreparator(
 
         validatedStx match {
           case Right(_) =>
-            val TxResult(newWorld, gasUsed, logs, rd, vmError) = executeTransaction(stx, blockHeader, worldForTx)
+            Try(executeTransaction(stx, blockHeader, worldForTx)) match {
+              case Success(TxResult(newWorld, gasUsed, logs, rd, vmError)) =>
+                val (statusCode, returnData) =
+                  if (blockchainConfig.ethCompatibilityMode) (None, None)
+                  else (
+                    Some(vmError match {
+                      case Some(WithReturnCode(returnCode)) => returnCode
+                      case Some(OutOfGas) => ByteString(StatusCodeOutOfGas)
+                      case Some(_) => ByteString(StatusCodeExecFailure)
+                      case None => ByteString(StatusCodeSuccess)
+                    }),
+                    Some(rd))
 
-            val (statusCode, returnData) =
-              if (blockchainConfig.ethCompatibilityMode) (None, None)
-              else (
-                Some(vmError match {
-                  case Some(WithReturnCode(returnCode)) => returnCode
-                  case Some(OutOfGas) => ByteString(StatusCodeOutOfGas)
-                  case Some(_) => ByteString(StatusCodeExecFailure)
-                  case None => ByteString(StatusCodeSuccess)
-                }),
-                Some(rd))
+                val receipt = Receipt(
+                  postTransactionStateHash = newWorld.stateRootHash,
+                  cumulativeGasUsed = acumGas + gasUsed,
+                  logsBloomFilter = BloomFilter.create(logs),
+                  logs = logs,
+                  statusCode = statusCode,
+                  returnData = returnData)
 
-            val receipt = Receipt(
-              postTransactionStateHash = newWorld.stateRootHash,
-              cumulativeGasUsed = acumGas + gasUsed,
-              logsBloomFilter = BloomFilter.create(logs),
-              logs = logs,
-              statusCode = statusCode,
-              returnData = returnData)
+                log.info(s"Receipt for tx ${stx.hashAsHexString} of block ${blockHeader.idTag}: $receipt")
+                executeTransactions(otherStxs, newWorld, blockHeader, receipt.cumulativeGasUsed, acumReceipts :+ receipt)
 
-            log.info(s"Receipt for tx ${stx.hashAsHexString} of block ${blockHeader.idTag}: $receipt")
+              case Failure(ex) =>
+                // Abnormal execution of a TX, e.g. a VM timeout (GMC-179)
+                log.error(s"Failed to execute transaction ${stx.hashAsHexString}", ex)
+                Left(TxsExecutionError(stx, StateBeforeFailure(world, acumGas, acumReceipts), ex.getMessage))
+            }
 
-            executeTransactions(otherStxs, newWorld, blockHeader, receipt.cumulativeGasUsed, acumReceipts :+ receipt)
           case Left(error) => Left(TxsExecutionError(stx, StateBeforeFailure(world, acumGas, acumReceipts), error.toString))
         }
     }
@@ -298,10 +306,11 @@ class BlockPreparator(
 
     result match {
       case Left(TxsExecutionError(stx, StateBeforeFailure(worldState, gas, receipts), reason)) =>
-        log.debug(s"failure while preparing block because of $reason in transaction with hash ${stx.hashAsHexString}")
-        val txIndex = signedTransactions.indexWhere(tx => tx.hash == stx.hash)
-        executePreparedTransactions(signedTransactions.drop(txIndex + 1),
-          worldState, blockHeader, gas, receipts, executed ++ signedTransactions.take(txIndex))
+        log.debug(s"failure while preparing block ${blockHeader.number} because of $reason in transaction with hash ${stx.hashAsHexString}")
+        val (successful, remainingInclFailure) = signedTransactions.span(_.hash != stx.hash)
+        executePreparedTransactions(remainingInclFailure.tail,
+          worldState, blockHeader, gas, receipts, executed ++ successful)
+
       case Right(br) => (br, executed ++ signedTransactions)
     }
   }

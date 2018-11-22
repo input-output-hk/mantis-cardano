@@ -2,14 +2,15 @@ package io.iohk.ethereum.extvm
 
 import akka.util.ByteString
 import com.trueaccord.scalapb.GeneratedMessageCompanion
-import io.iohk.ethereum.domain.{Account, Address, TxLogEntry, UInt256}
+import io.iohk.ethereum.domain.{Account, Address, UInt256}
 import io.iohk.ethereum.extvm.msg.CallContext.Config
-import io.iohk.ethereum.utils.{BlockchainConfig, VmConfig}
+import io.iohk.ethereum.utils.{BlockchainConfig, RetryConfig, VmConfig}
 import io.iohk.ethereum.vm.utils.MockVmInput
 import io.iohk.ethereum.vm._
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
+import scala.concurrent.duration._
 
 class VMClientSpec extends FlatSpec with Matchers with MockFactory {
 
@@ -160,26 +161,6 @@ class VMClientSpec extends FlatSpec with Matchers with MockFactory {
     vmClient.sendHello("testVersion", blockchainConfig)
   }
 
-  it should "be able to construct ProgramResult from ErrorCallResult" in {
-    val resultMsg = ErrorCallResult(AwaitMessageFailureCode, 0, 0)
-
-    // Just make sure we can construct this. Not obvious it can be done,
-    // as it is highly sensitive to what values the `resultMsg` fields have.
-    // The bug we saw in production was about default values for optional
-    // protobuf fields that could not be interpreted as BigInts.
-    val programResult: ProgramResult[MockWorldState, MockStorage] =
-      ProgramResult(
-        resultMsg.returnData,
-        resultMsg.gasRemaining,
-        MockWorldState(),
-        resultMsg.deletedAccounts.map(a => a: Address).toSet,
-        resultMsg.logs.map(l => TxLogEntry(l.address, l.topics.map(t => t: ByteString), l.data)),
-        Nil,
-        resultMsg.gasRefund,
-        if (resultMsg.error) Some(WithReturnCode(resultMsg.returnCode)) else None
-      )
-  }
-
   trait TestSetup {
     val blockHeader = Block3125369.header
 
@@ -209,7 +190,7 @@ class VMClientSpec extends FlatSpec with Matchers with MockFactory {
 
     val messageHandler = mock[MessageHandler]
 
-    val externalVmConfig = VmConfig.ExternalConfig("mantis", false, None, "127.0.0.1", 0)
+    val externalVmConfig = VmConfig.ExternalConfig("mantis", false, None, "127.0.0.1", 0, RetryConfig(0, 1.second))
     val vmClient = new VMClient(externalVmConfig, messageHandler, testMode = false)
   }
 

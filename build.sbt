@@ -82,7 +82,10 @@ val dep = {
     "io.projectreactor" % "reactor-core" % reactorCoreVersion,
     "io.projectreactor.ipc" % "reactor-netty" % reactorNettyVersion,
     // Logging
-    "io.riemann" % "riemann-java-client" % riemannVersion
+    "io.riemann" % "riemann-java-client" % riemannVersion,
+
+    // retry
+    "io.paradoxical" %% "atmos" % "2.2"
   )
 }
 

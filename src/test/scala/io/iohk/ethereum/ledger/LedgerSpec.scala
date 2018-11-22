@@ -617,6 +617,28 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
     result match { case (_, executedTxs) => executedTxs shouldBe Seq.empty }
   }
 
+  it should "ignore a TX if the VM fails" in new TestSetup {
+    val newAccountKeyPair = generateKeyPair(secureRandom)
+
+    override lazy val vm = new MockVM((pc: Ledger.PC) => {
+      if (pc.recipientAddr.contains(Address(42)))
+        throw new Exception("VM failure")
+      else
+        createResult(pc, defaultGasLimit, defaultGasLimit, 0, None, returnData = ByteString.empty)
+    })
+
+    val tx1 = defaultTx.copy(gasPrice = 42, receivingAddress = Some(Address(41)))
+    val tx2 = defaultTx.copy(gasPrice = 42, receivingAddress = Some(Address(42)))
+    val tx3 = defaultTx.copy(gasPrice = 42, receivingAddress = Some(Address(43)))
+    val stx1 = SignedTransaction.sign(tx1, newAccountKeyPair, Some(blockchainConfig.chainId))
+    val stx2 = SignedTransaction.sign(tx2, newAccountKeyPair, Some(blockchainConfig.chainId))
+    val stx3 = SignedTransaction.sign(tx3, newAccountKeyPair, Some(blockchainConfig.chainId))
+
+    val (_, executed) = consensus.blockPreparator.executePreparedTransactions(Seq(stx1, stx2, stx3), initialWorld, defaultBlockHeader)
+
+    executed shouldEqual Seq(stx1, stx3)
+  }
+
   it should "drain DAO accounts and send the funds to refund address if Pro DAO Fork was configured" in new DaoForkTestSetup {
 
     (worldState.getAccount _)
