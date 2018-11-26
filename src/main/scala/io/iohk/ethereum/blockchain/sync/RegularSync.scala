@@ -99,20 +99,25 @@ class RegularSync(
   def handleAdditionalMessages: Receive = handleNewBlockMessages orElse handleMinedBlock orElse handleNewBlockHashesMessages
 
   private def resumeRegularSync(): Unit = {
+    log.debug("Regular sync resumed")
     cancelScheduledResume()
 
     // The case that waitingForActor is defined (we are waiting for some response),
     // can happen when we are on top of the chain and currently handling newBlockHashes message
 
     if (waitingForActor.isEmpty) {
+      log.debug("Regular sync is not waiting for any response")
       if (missingStateNodeRetry.isEmpty) {
+        log.debug("Requesting block headers")
         headersQueue = Nil
         resolvingBranches = false
         askForHeaders()
       } else {
+        log.debug("Requesting missing state nodes")
         requestMissingNode(missingStateNodeRetry.get.nodeId)
       }
     } else {
+      log.debug("Regular sync is already waiting for response")
       resumeRegularSyncTimeout = Some(scheduler.scheduleOnce(checkForNewBlockInterval, self, ResumeRegularSync))
     }
   }
@@ -126,6 +131,10 @@ class RegularSync(
   def handleNewBlockMessages: Receive = {
     case MessageFromPeer(NewBlock(newBlock, _), peerId) =>
       //we allow inclusion of new block only if we are not syncing
+
+      log.debug(s"Received new block (num ${newBlock.header.number}) from peer $peerId. " +
+        s"The chain is ${if (!topOfTheChain) "not " else ""}at the top")
+
       if (notDownloading() && topOfTheChain) {
         Event.ok("block new message")
           .block(newBlock)
