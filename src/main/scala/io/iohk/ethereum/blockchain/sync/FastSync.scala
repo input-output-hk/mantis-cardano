@@ -45,8 +45,6 @@ class FastSync(
 
   val syncController: ActorRef = context.parent
 
-  protected def mainService: String = "fast sync"
-
   override def receive: Receive = idle
 
   def handleCommonMessages: Receive = handlePeerListMessages orElse handleBlacklistMessages

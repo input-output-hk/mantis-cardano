@@ -15,8 +15,6 @@ class ServerActor(nodeStatusHolder: Agent[NodeStatus], peerManager: ActorRef) ex
   import ServerActor._
   import context.system
 
-  protected def mainService: String = "server actor"
-
   override def receive: Receive = {
     case StartServer(address) =>
       IO(Tcp) ! Bind(self, address)

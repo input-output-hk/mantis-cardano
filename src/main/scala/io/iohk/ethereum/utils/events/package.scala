@@ -2,6 +2,7 @@ package io.iohk.ethereum.utils
 
 import io.iohk.ethereum.domain.{Block, BlockHeader}
 import io.iohk.ethereum.network.PeerId
+import org.spongycastle.util.encoders.Hex
 
 // Gathers together event-related stuff, so that you can easily import them all at once
 package object events {
@@ -24,21 +25,36 @@ package object events {
 
     def header(header: BlockHeader): EventDSL =
       event
-        .attribute("header", header.number)
-        .attribute("headerHex", "0x" + header.number.toString(16))
-        .attribute("headerHash", "0x" + header.hashAsHexString)
+        .attribute("block", header.number)
+        .attribute("blockHex", "0x" + header.number.toString(16))
+        .attribute("blockHash", "0x" + header.hashAsHexString)
+        .attribute("blockGasLimit", header.gasLimit)
+        .attribute("blockGasUsed", header.gasUsed)
+        .attribute("blockDifficulty", header.difficulty)
+        .attribute("blockBeneficiary", "0x" + Hex.toHexString(header.beneficiary.toArray[Byte]))
+
 
     def block(block: Block): EventDSL =
       event
         .attribute("block", block.header.number)
         .attribute("blockHex", "0x" + block.header.number.toString(16))
         .attribute("blockHash", "0x" + block.header.hashAsHexString)
+        .attribute("blockTxCount", block.body.transactionList.size)
+        .attribute("blockGasLimit", block.header.gasLimit)
+        .attribute("blockGasUsed", block.header.gasUsed)
+        .attribute("blockDifficulty", block.header.difficulty)
+        .attribute("blockBeneficiary", "0x" + Hex.toHexString(block.header.beneficiary.toArray[Byte]))
 
     def block(prefix: String, header: BlockHeader): EventDSL =
       event
         .attribute(s"${prefix}Block", header.number)
         .attribute(s"${prefix}BlockHex", "0x" + header.number.toString(16))
         .attribute(s"${prefix}BlockHash", "0x" + header.hashAsHexString)
+        .attribute(s"${prefix}BlockGasLimit", header.gasLimit)
+        .attribute(s"${prefix}BlockGasUsed", header.gasUsed)
+        .attribute(s"${prefix}BlockDifficulty", header.difficulty)
+        .attribute(s"${prefix}BlockBeneficiary", "0x" + Hex.toHexString(header.beneficiary.toArray[Byte]))
+
 
     def block(prefix: String, block: Block): EventDSL = this.block(prefix, block.header)
   }
@@ -62,15 +78,26 @@ package object events {
   }
 
   object EventAttr {
+    final val ActorRef = "actorRef"
+    final val AppComponent = "appComponent"
     final val BatchIndex = "batchIndex"
     final val BatchSize = "batchSize"
+    final val BlacklistPeerCount = "blacklistPeerCount"
     final val Count = "count"
+    final val Dispatcher = "dispatcher"
     final val Error = "error"
     final val File = "file"
     final val Id = "id"
     final val IsBatch = "isBatch"
+    final val MiningEnabled = "miningEnabled"
+    final val PeerCount = "peerCount"
     final val PeerId = "peerId"
+    final val RequestMethod = "requestMethod"
+    final val RequestJson = "requestJson"
+    final val RequestObj = "requestObj"
     final val Resource = "resource"
+    final val ResponseJson = "responseJson"
+    final val ResponseObj = "responseObj"
     final val IP = "ip"
     final val Status = "status"
     final val ThreadId = "threadId"

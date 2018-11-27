@@ -5,7 +5,7 @@ import io.iohk.ethereum.utils.Riemann
 trait EventSupport {
   // The main service is always a prefix of the event service.
   // Use something short.
-  protected def mainService: String
+  protected def mainService: String = getClass.getSimpleName
 
   // An implementor decides what else is added in the event.
   protected def postProcessEvent(event: EventDSL): EventDSL = event
@@ -13,8 +13,10 @@ trait EventSupport {
   private[this] def mkService(moreService: String): String =
     if(moreService.isEmpty) mainService else s"${mainService} ${moreService}"
 
-  private[this] def postProcessAndTagMainService(event: EventDSL): EventDSL =
-    postProcessEvent(event).tag(mainService)
+  private[this] def postProcessInternal(event: EventDSL): EventDSL =
+    postProcessEvent(event)
+      .attribute(EventAttr.AppComponent, mainService)
+      .attribute("thread", Thread.currentThread().getName)
 
   // DSL convenience for the eye.
   @inline final protected def Event: this.type = this
@@ -28,7 +30,7 @@ trait EventSupport {
   protected def ok(moreService: String): EventDSL = {
     val service = mkService(moreService)
     val event = Riemann.ok(service)
-    postProcessAndTagMainService(event)
+    postProcessInternal(event)
   }
 
   protected def ok(): EventDSL = ok("")
@@ -39,7 +41,7 @@ trait EventSupport {
   protected def warning(moreService: String): EventDSL = {
     val service = mkService(moreService)
     val event = Riemann.warning(service)
-    postProcessAndTagMainService(event)
+    postProcessInternal(event)
   }
 
   protected def warningStart(): EventDSL = warning(EventTag.Start).tag(EventTag.Start)
@@ -47,13 +49,13 @@ trait EventSupport {
   protected def error(moreService: String): EventDSL = {
     val service = mkService(moreService)
     val event = Riemann.warning(service)
-    postProcessAndTagMainService(event)
+    postProcessInternal(event)
   }
 
   protected def exception(moreService: String, t: Throwable): EventDSL = {
     val service = mkService(moreService)
     val event = Riemann.exception(service, t)
-    postProcessAndTagMainService(event)
+    postProcessInternal(event)
   }
 
   protected def exception(t: Throwable): EventDSL = exception("", t)

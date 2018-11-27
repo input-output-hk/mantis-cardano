@@ -1,7 +1,9 @@
 package io.iohk.ethereum.nodebuilder
 
-import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{Executors, TimeUnit}
 
+import akka.actor.ActorSystem
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import io.iohk.ethereum.blockchain.sync.SyncController
 import io.iohk.ethereum.buildinfo.MantisBuildInfo
 import io.iohk.ethereum.consensus.StdConsensusBuilder
@@ -9,7 +11,8 @@ import io.iohk.ethereum.metrics.Metrics
 import io.iohk.ethereum.network.discovery.DiscoveryListener
 import io.iohk.ethereum.network.{PeerManagerActor, ServerActor}
 import io.iohk.ethereum.testmode.{TestLedgerBuilder, TestmodeConsensusBuilder}
-import io.iohk.ethereum.utils.{Config, JsonUtils, Scheduler}
+import io.iohk.ethereum.utils._
+import io.iohk.ethereum.utils.events.EventSupport
 
 import scala.concurrent.Await
 import scala.util.{Failure, Success, Try}
@@ -23,7 +26,7 @@ import scala.util.{Failure, Success, Try}
  *
  * @see [[io.iohk.ethereum.nodebuilder.Node Node]]
  */
-abstract class BaseNode extends Node {
+abstract class BaseNode extends Node with EventSupport {
   private[this] lazy val metrics = Metrics.get() // TODO inject
   private[this] lazy val nodeMetrics = new BaseNodeMetrics(metrics)
 
@@ -70,17 +73,22 @@ abstract class BaseNode extends Node {
     log.info(s"buildInfo = \n$json")
   }
 
-  // FIXME This `var` needs another look.
-  private var sendExecutor: ScheduledExecutorService = null
+  private[this] def startHealthcheckSender(): Unit = {
+    val tf = (new ThreadFactoryBuilder)
+      .setDaemon(true)
+      .setNameFormat("healthcheck-sender-%d")
+      .setPriority(Thread.NORM_PRIORITY)
+      .build()
 
-  // FIXME This is not the build info sender anymore...
-  private[this] def startBuildInfoSender(): ScheduledExecutorService = {
-    Scheduler.startRunner(
-      Config.healthIntervalMilliseconds,
-      TimeUnit.MILLISECONDS,
+    val executor = Executors.newScheduledThreadPool(1, tf)
+    executor.scheduleAtFixedRate(
       () => {
+        // This will trigger the healthcheck events
         jsonRpcController.healthcheck()
-      }
+      },
+      Config.healthIntervalMilliseconds,
+      Config.healthIntervalMilliseconds,
+      TimeUnit.MILLISECONDS
     )
   }
 
@@ -88,8 +96,6 @@ abstract class BaseNode extends Node {
     logBuildInfo()
 
     startMetrics()
-
-    sendExecutor = startBuildInfoSender()
 
     loadGenesisData()
 
@@ -107,24 +113,52 @@ abstract class BaseNode extends Node {
 
     startJsonRpcHttpServer()
     startJsonRpcIpcServer()
+
+    startHealthcheckSender()
   }
 
   override def shutdown(): Unit = {
-    def tryAndLogFailure(f: () => Any): Unit = Try(f()) match {
-      case Failure(e) => log.warn("Error while shutting down...", e)
+    var errorCount = 0
+
+    def tryAndLogFailure[A <: AnyRef](what: A)(f: A => Any): Unit = Try(f(what)) match {
+      case Failure(e) =>
+        errorCount += 1
+        val msg = s"Error [$errorCount] shutting down $what"
+        log.warn(msg, e)
+        Event.warning("shutdown").description(msg).send()
       case Success(_) =>
     }
 
-    tryAndLogFailure(() => consensus.stopProtocol())
-    tryAndLogFailure(() => Await.ready(system.terminate, shutdownTimeoutDuration))
-    tryAndLogFailure(() => storagesInstance.dataSources.closeAll())
-    tryAndLogFailure(() => sendExecutor.shutdown())
-    tryAndLogFailure(() => jsonRpcController.shutdown())
+    log.info(s"Shutdown sequence initiated")
+
+    tryAndLogFailure(consensus)(_.stopProtocol())
+    tryAndLogFailure(system)((system: ActorSystem) => Await.ready(system.terminate, shutdownTimeoutDuration))
+    tryAndLogFailure(storagesInstance.dataSources)(_.closeAll())
+    tryAndLogFailure(jsonRpcController)(_.shutdown())
     if (jsonRpcConfig.ipcServerConfig.enabled) {
-      tryAndLogFailure(() => jsonRpcIpcServer.close())
+      tryAndLogFailure(jsonRpcIpcServer)(_.close())
     }
 
-    tryAndLogFailure(() => metrics.close())
+    tryAndLogFailure(metrics)(_.close())
+
+    val msg = s"Shutdown sequence complete, $errorCount error(s)"
+
+    if(errorCount > 0) {
+      log.warn(msg)
+      Event.warning("shutdown")
+        .description(msg)
+        .attribute("errorCount", errorCount.toString)
+        .send()
+    }
+    else {
+      log.info(msg)
+      Event.ok("shutdown")
+        .description(msg)
+        .send()
+    }
+
+    Try(Riemann.close())
+
   }
 }
 

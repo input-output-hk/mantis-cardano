@@ -94,7 +94,7 @@ class LedgerImpl(
 
   private[this] final val metrics = new LedgerMetrics(Metrics.get(), () ⇒ blockchain.getBestBlockNumber().doubleValue)
 
-  protected def mainService: String = "ledger"
+  override protected def mainService: String = "Ledger"
 
   def consensus: Consensus = theConsensus
 

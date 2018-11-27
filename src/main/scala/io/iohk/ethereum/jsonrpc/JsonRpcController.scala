@@ -101,8 +101,6 @@ class JsonRpcController(
 
   private[this] val metrics = new JsonRpcControllerMetrics(Metrics.get())
 
-  protected def mainService: String = "jsonrpc"
-
   lazy val apisHandleFns: Map[String, PartialFunction[JsonRpcRequest, Future[JsonRpcResponse]]] = Map(
     Apis.Eth -> handleEthRequest,
     Apis.Web3 -> handleWeb3Request,

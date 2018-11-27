@@ -14,8 +14,6 @@ case class EtcNodeStatusExchangeState(handshakerConfiguration: EtcHandshakerConf
 
   import handshakerConfiguration._
 
-  protected def mainService: String = "node state"
-
   def nextMessage: NextMessage =
     NextMessage(
       messageToSend = createStatusMsg(),

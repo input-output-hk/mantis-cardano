@@ -17,7 +17,7 @@ class VMClient(
     externalVmConfig: VmConfig.ExternalConfig,
     messageHandler: MessageHandler,
     testMode: Boolean)
-  extends Logger {
+  extends Logger with EventSupport {
 
   def sendHello(version: String, blockchainConfig: BlockchainConfig): Unit = {
     val config = BlockchainConfigForEvm(blockchainConfig)

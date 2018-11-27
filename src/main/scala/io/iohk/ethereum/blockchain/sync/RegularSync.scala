@@ -45,8 +45,6 @@ class RegularSync(
   import RegularSync._
   import syncConfig._
 
-  protected def mainService: String = "regular sync"
-
   private var headersQueue: Seq[BlockHeader] = Nil
   private var waitingForActor: Option[ActorRef] = None
   var resolvingBranches: Boolean = false
@@ -63,6 +61,10 @@ class RegularSync(
   scheduler.schedule(reportStatusInterval, reportStatusInterval, self, PrintStatus)
 
   peerEventBus ! Subscribe(MessageClassifier(Set(NewBlock.code, NewBlockHashes.code), PeerSelector.AllPeers))
+
+  Event.ok(EventAttr.Dispatcher)
+    .attribute(EventAttr.Dispatcher, context.dispatcher.toString)
+    .send()
 
   def handleCommonMessages: Receive = handlePeerListMessages orElse handleBlacklistMessages
 
@@ -94,6 +96,11 @@ class RegularSync(
       val handshakedPeerCount = handshakedPeers.size
       val blacklistedPeerCount = blacklistedPeers.size
       log.info(s"Best Block: ${number} (= 0x${numberHex}). Handshaked Peers: ${handshakedPeerCount}. Blacklisted: ${blacklistedPeerCount}")
+
+      Event.ok()
+        .attribute(EventAttr.PeerCount, handshakedPeerCount)
+        .attribute(EventAttr.BlacklistPeerCount, blacklistedPeerCount)
+        .send()
   }
 
   def handleAdditionalMessages: Receive = handleNewBlockMessages orElse handleMinedBlock orElse handleNewBlockHashesMessages
@@ -674,12 +681,15 @@ class RegularSync(
 }
 
 object RegularSync {
+  final val RegularSyncDispatcherId = io.iohk.ethereum.async.DispatcherId("mantis.async.dispatchers.regular-sync")
+
   // scalastyle:off parameter.number
   def props(appStateStorage: AppStateStorage, etcPeerManager: ActorRef, peerEventBus: ActorRef, ommersPool: ActorRef,
       txPool: ActorRef, broadcaster: BlockBroadcast, ledger: Ledger, blockchain: Blockchain,
       syncConfig: SyncConfig, scheduler: Scheduler): Props =
     Props(new RegularSync(appStateStorage, etcPeerManager, peerEventBus, ommersPool, txPool,
       broadcaster, ledger, blockchain, syncConfig, scheduler))
+      .withDispatcher(RegularSyncDispatcherId)
 
   private[sync] case object ResumeRegularSync
   private case class ResolveBranch(peer: ActorRef)

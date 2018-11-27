@@ -19,8 +19,6 @@ import scala.util.{Failure, Success, Try}
   * If during persisting more than one new state is received then only the last state will be kept in queue.
   */
 class FastSyncStateStorageActor extends Actor with EventSupport {
-  protected def mainService: String = "fast sync storage"
-
   def receive: Receive = {
     // after initialization send a valid Storage reference
     case storage: FastSyncStateStorage => context become idle(storage)

@@ -37,10 +37,8 @@ class AtomixRaftConsensus private(
   val blockGenerator: AtomixRaftBlockGenerator
 ) extends TestConsensus with Logger with EventSupport {
 
-  protected def mainService: String = "raft"
-
   override protected def postProcessEvent(event: EventDSL): EventDSL =
-    event.tag("consensus")
+    event.tag("consensus").attribute(EventAttr.MiningEnabled, config.miningEnabled.toString)
 
   type Config = AtomixRaftConfig
 
@@ -78,10 +76,12 @@ class AtomixRaftConsensus private(
     metrics.BecomeLeaderCounter.increment()
 
     forgerRef ! IAmTheLeader
+
+    Event.ok("leader elected").send()
   }
 
   private[this] def onLeaderWithMiningDisabled(): Unit = {
-    Event.warning("leader elected").attribute(ConsensusConfig.Keys.MiningEnabled, config.miningEnabled.toString).send()
+    Event.warning("leader elected").send()
 
     raftServer.run { server ⇒
       val cluster = server.cluster()
@@ -104,7 +104,7 @@ class AtomixRaftConsensus private(
   }
 
   private[this] def onRoleChange(role: RaftServer.Role): Unit = {
-    Event.ok("role changed").attribute("role", role.toString).attribute(ConsensusConfig.Keys.MiningEnabled, config.miningEnabled.toString).send()
+    Event.ok("role changed").attribute("role", role.toString).send()
 
     if(role == RaftServer.Role.LEADER) {
       if(config.miningEnabled) {

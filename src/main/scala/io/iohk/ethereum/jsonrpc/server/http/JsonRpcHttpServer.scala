@@ -33,8 +33,6 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
 
   implicit val formats = DefaultFormats
 
-  protected def mainService: String = "jsonrpc http"
-
   def corsAllowedOrigins: HttpOriginRange
   def maxContentLength: Long
 
@@ -125,9 +123,9 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
 
   private[this] final val buildInfoRoute: StandardRoute = complete(buildInfoResponse)
 
-  private[this] def handleBuildInfo() = buildInfoRoute
+  private[this] def handleBuildInfo(): StandardRoute = buildInfoRoute
 
-  private[this] def handleHealthcheck() = {
+  private[this] def handleHealthcheck(): StandardRoute = {
     val responseF = jsonRpcController.healthcheck()
 
     val httpResponseF =
@@ -179,19 +177,18 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
   private def updateEventWithRequest(event: EventDSL, request: JsonRpcRequest): EventDSL = {
     val requestJson = serialization.write(request)
     event
-      .attribute("requestMethod", request.method)
-      .attribute("requestObj", request.toString)
-      .attribute("requestJson", requestJson)
+      .attribute(EventAttr.RequestMethod, request.method)
+      .attribute(EventAttr.RequestObj, request.toString)
+      .attribute(EventAttr.RequestJson, requestJson)
   }
 
   private def updateEventWithResponse(event: EventDSL, response: JsonRpcResponse): EventDSL = {
     val responseJson = serialization.write(response)
     event
-      .attribute("responseObj", response.toString)
-      .attribute("responseJson", responseJson)
+      .attribute(EventAttr.ResponseObj, response.toString)
+      .attribute(EventAttr.ResponseJson, responseJson)
   }
 
-  // scalastyle:off method.length
   private def handleRequestInternal(
     uuid: UUID,
     isBatch: Boolean,
