@@ -126,7 +126,7 @@ object Metrics extends Logger {
   //- Metrics singleton support
 
   private[this] def onMeterAdded(m: Meter): Unit =
-    log.debug(s"New ${m.getClass.getSimpleName} metric: " + m.getId.getName)
+    log.debug(s"New ${m.getClass.getSimpleName}: " + m.getId.getName)
 
   private[this] def newJmxMeterRegistry(): JmxMeterRegistry = {
     val jmx = new JmxMeterRegistry(new MantisJmxConfig, StdMetricsClock)
@@ -147,8 +147,7 @@ object Metrics extends Logger {
     val riemann = new RiemannRegistry(config, percentiles, riemannClientF)
 
     // We create a special thread factory that makes daemon threads of special priority
-    val tfBuilder = new ThreadFactoryBuilder
-    val tf = tfBuilder
+    val tf = (new ThreadFactoryBuilder)
       .setDaemon(true)
       .setNameFormat(classOf[RiemannRegistry].getSimpleName + "-%d")
       .setPriority(Thread.MAX_PRIORITY)

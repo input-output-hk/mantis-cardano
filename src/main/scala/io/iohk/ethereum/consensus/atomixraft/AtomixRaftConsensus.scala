@@ -2,6 +2,7 @@ package io.iohk.ethereum.consensus
 package atomixraft
 
 import java.time.{Duration ⇒ JDuration}
+import java.util.concurrent.atomic.AtomicReference
 
 import io.atomix.cluster._
 import io.atomix.cluster.impl.{DefaultClusterMetadataService, DefaultClusterService}
@@ -57,6 +58,8 @@ class AtomixRaftConsensus private(
 
   private[this] final val metrics = new AtomixRaftConsensusMetrics(Metrics.get())
 
+  private[this] final val roleRef = new AtomicReference[Option[RaftServer.Role]](None)
+
   private[this] def startForger(node: Node): Unit = {
     forgerRef.setOnce {
       val miner = AtomixRaftForger(node)
@@ -104,7 +107,14 @@ class AtomixRaftConsensus private(
   }
 
   private[this] def onRoleChange(role: RaftServer.Role): Unit = {
-    Event.ok("role changed").attribute("role", role.toString).send()
+    val oldRole = roleRef.get().map(_.toString).getOrElse("")
+
+    roleRef.set(Some(role))
+
+    Event.ok("role changed")
+      .attribute(EventAttr.NewRole, role.toString)
+      .attribute(EventAttr.OldRole, oldRole)
+      .send()
 
     if(role == RaftServer.Role.LEADER) {
       if(config.miningEnabled) {

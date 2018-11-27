@@ -90,6 +90,8 @@ package object events {
     final val Id = "id"
     final val IsBatch = "isBatch"
     final val MiningEnabled = "miningEnabled"
+    final val NewRole = "newRole"
+    final val OldRole = "oldRole"
     final val PeerCount = "peerCount"
     final val PeerId = "peerId"
     final val RequestMethod = "requestMethod"

@@ -16,7 +16,7 @@ trait EventSupport {
   private[this] def postProcessInternal(event: EventDSL): EventDSL =
     postProcessEvent(event)
       .attribute(EventAttr.AppComponent, mainService)
-      .attribute("thread", Thread.currentThread().getName)
+      .attribute(EventAttr.ThreadName, Thread.currentThread().getName)
 
   // DSL convenience for the eye.
   @inline final protected def Event: this.type = this
