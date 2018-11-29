@@ -3,20 +3,27 @@ package io.iohk.ethereum.jsonrpc.server.http
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.headers.HttpOriginRange
-import akka.stream.ActorMaterializer
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import io.iohk.ethereum.jsonrpc._
 import io.iohk.ethereum.jsonrpc.server.http.JsonRpcHttpServer.JsonRpcHttpServerConfig
 import io.iohk.ethereum.utils.Logger
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Success}
 
-class BasicJsonRpcHttpServer(val jsonRpcController: JsonRpcController, config: JsonRpcHttpServerConfig)
+class BasicJsonRpcHttpServer(_jsonRpcController: JsonRpcController, config: JsonRpcHttpServerConfig)
                             (implicit val actorSystem: ActorSystem)
   extends JsonRpcHttpServer with Logger {
 
+  val dispatcherIdPath: String = JsonRpcHttpServer.JsonRpcHttpDispatcherId.configPath
+
+  implicit val routeExecutionContext: ExecutionContextExecutor = actorSystem.dispatchers.lookup(dispatcherIdPath)
+
+  val jsonRpcController: JsonRpcController = _jsonRpcController.withExecutionContext(routeExecutionContext)
+
   def run(): Unit = {
-    implicit val materializer = ActorMaterializer()
+    val materializerSettings = ActorMaterializerSettings(actorSystem).withDispatcher(dispatcherIdPath)
+    implicit val materializer = ActorMaterializer(materializerSettings)
 
     val bindingResultF = Http(actorSystem).bindAndHandle(route, config.interface, config.port)
 

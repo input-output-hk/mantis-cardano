@@ -2,6 +2,7 @@ package io.iohk.ethereum.blockchain.sync
 
 import akka.actor._
 import akka.util.ByteString
+import io.iohk.ethereum.async.DispatcherId
 import io.iohk.ethereum.blockchain.sync.PeerRequestHandler.ResponseReceived
 import io.iohk.ethereum.crypto._
 import io.iohk.ethereum.db.storage.AppStateStorage
@@ -681,7 +682,7 @@ class RegularSync(
 }
 
 object RegularSync {
-  final val RegularSyncDispatcherId = io.iohk.ethereum.async.DispatcherId("mantis.async.dispatchers.regular-sync")
+  final val RegularSyncDispatcherId = DispatcherId("mantis.async.dispatchers.regular-sync")
 
   // scalastyle:off parameter.number
   def props(appStateStorage: AppStateStorage, etcPeerManager: ActorRef, peerEventBus: ActorRef, ommersPool: ActorRef,
@@ -689,7 +690,6 @@ object RegularSync {
       syncConfig: SyncConfig, scheduler: Scheduler): Props =
     Props(new RegularSync(appStateStorage, etcPeerManager, peerEventBus, ommersPool, txPool,
       broadcaster, ledger, blockchain, syncConfig, scheduler))
-      .withDispatcher(RegularSyncDispatcherId)
 
   private[sync] case object ResumeRegularSync
   private case class ResolveBranch(peer: ActorRef)
