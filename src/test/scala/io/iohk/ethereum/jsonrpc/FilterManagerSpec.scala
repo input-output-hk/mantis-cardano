@@ -18,8 +18,8 @@ import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.jsonrpc.FilterManager.LogFilterLogs
 import io.iohk.ethereum.ledger.BloomFilter
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
-import io.iohk.ethereum.transactions.PendingTransactionsManager
-import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransaction
+import io.iohk.ethereum.transactions.TransactionPool
+import io.iohk.ethereum.transactions.TransactionPool.PendingTransaction
 import io.iohk.ethereum.utils.{FilterConfig, TxPoolConfig}
 import org.scalatest.concurrent.ScalaFutures
 
@@ -324,8 +324,8 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
       (filterManager ? FilterManager.GetFilterLogs(createResp.id))
         .mapTo[FilterManager.PendingTransactionFilterLogs]
 
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsManager.PendingTransactionsResponse(pendingTxs.map(PendingTransaction(_, 0))))
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
+    txPool.reply(TransactionPool.PendingTransactionsResponse(pendingTxs.map(PendingTransaction(_, 0))))
 
     val getLogsRes = getLogsResF.futureValue
 
@@ -361,8 +361,8 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
       (filterManager ? FilterManager.GetFilterLogs(createResp.id))
         .mapTo[FilterManager.PendingTransactionFilterLogs]
 
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsManager.PendingTransactionsResponse(pendingTxs.map(PendingTransaction(_, 0))))
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
+    txPool.reply(TransactionPool.PendingTransactionsResponse(pendingTxs.map(PendingTransaction(_, 0))))
 
     val getLogsRes = getLogsResF.futureValue
 
@@ -376,7 +376,7 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
       (filterManager ? FilterManager.GetFilterLogs(createResp.id))
         .mapTo[FilterManager.FilterLogs].futureValue
 
-    pendingTransactionsManager.expectNoMsg()
+    txPool.expectNoMsg()
 
     getLogsRes2 shouldBe LogFilterLogs(Nil)
   }
@@ -402,7 +402,7 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
     val appStateStorage = mock[AppStateStorage]
     val keyStore = mock[KeyStore]
     val blockGenerator = mock[BlockGenerator]
-    val pendingTransactionsManager = TestProbe()
+    val txPool = TestProbe()
 
     val blockHeader = BlockHeader(
       parentHash = ByteString(Hex.decode("fd07e36cfaf327801e5696134b36678f6a89fb1e8f017f2411a29d0ae810ab8b")),
@@ -427,7 +427,7 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
         blockGenerator,
         appStateStorage,
         keyStore,
-        pendingTransactionsManager.ref,
+        txPool.ref,
         config,
         txPoolConfig,
         Some(time.scheduler))

@@ -30,7 +30,7 @@ import io.iohk.ethereum.network.rlpx.AuthHandshaker
 import io.iohk.ethereum.network.{PeerManagerActor, ServerActor, _}
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.testmode.{TestLedgerBuilder, TestmodeConsensusBuilder}
-import io.iohk.ethereum.transactions.PendingTransactionsManager
+import io.iohk.ethereum.transactions.TransactionPool
 import io.iohk.ethereum.utils.Config.SyncConfig
 import io.iohk.ethereum.utils._
 
@@ -249,14 +249,14 @@ trait NetServiceBuilder {
   lazy val netService = new NetService(nodeStatusHolder, peerManager, netServiceConfig)
 }
 
-trait PendingTransactionsManagerBuilder {
+trait TxPoolBuilder {
   self: ActorSystemBuilder
     with PeerManagerActorBuilder
     with EtcPeerManagerActorBuilder
     with PeerEventBusBuilder
     with TxPoolConfigBuilder =>
 
-  lazy val pendingTransactionsManager: ActorRef = system.actorOf(PendingTransactionsManager.props(
+  lazy val txPool: ActorRef = system.actorOf(TransactionPool.props(
     txPoolConfig, peerManager, etcPeerManager, peerEventBus))
 }
 
@@ -266,7 +266,7 @@ trait FilterManagerBuilder {
     with BlockGeneratorBuilder
     with StorageBuilder
     with KeyStoreBuilder
-    with PendingTransactionsManagerBuilder
+    with TxPoolBuilder
     with FilterConfigBuilder
     with TxPoolConfigBuilder =>
 
@@ -277,7 +277,7 @@ trait FilterManagerBuilder {
         blockGenerator, // FIXME get from consensus
         storagesInstance.storages.appStateStorage,
         keyStore,
-        pendingTransactionsManager,
+        txPool,
         filterConfig,
         txPoolConfig), "filter-manager")
 }
@@ -294,14 +294,14 @@ trait BlockGeneratorBuilder {
 
 trait TestServiceBuilder {
   self: BlockchainBuilder with
-    PendingTransactionsManagerBuilder with
+    TxPoolBuilder with
     ConsensusConfigBuilder with
     BlockchainConfigBuilder with
     VmBuilder with
     TestmodeConsensusBuilder with
     TestLedgerBuilder =>
 
-  lazy val testService = new TestService(blockchain, pendingTransactionsManager, consensusConfig, consensus, testLedgerWrapper)
+  lazy val testService = new TestService(blockchain, txPool, consensusConfig, consensus, testLedgerWrapper)
 }
 
 trait EthServiceBuilder {
@@ -309,7 +309,7 @@ trait EthServiceBuilder {
     BlockchainBuilder with
     BlockGeneratorBuilder with
     BlockchainConfigBuilder with
-    PendingTransactionsManagerBuilder with
+    TxPoolBuilder with
     LedgerBuilder with
     KeyStoreBuilder with
     SyncControllerBuilder with
@@ -323,7 +323,7 @@ trait EthServiceBuilder {
     JSONRpcConfigBuilder =>
 
   lazy val ethService = new EthService(blockchain, storagesInstance.storages.appStateStorage,
-    ledger, keyStore, pendingTransactionsManager, syncController, ommersPool, filterManager, filterConfig,
+    ledger, keyStore, txPool, syncController, ommersPool, filterManager, filterConfig,
     blockchainConfig, Config.Network.protocolVersion, jsonRpcConfig, vmConfig,
     txPoolConfig.getTransactionFromPoolTimeout)
 }
@@ -332,11 +332,11 @@ trait PersonalServiceBuilder {
   self: KeyStoreBuilder with
     BlockchainBuilder with
     BlockchainConfigBuilder with
-    PendingTransactionsManagerBuilder with
+    TxPoolBuilder with
     StorageBuilder with
     TxPoolConfigBuilder =>
 
-  lazy val personalService = new PersonalService(keyStore, blockchain, pendingTransactionsManager,
+  lazy val personalService = new PersonalService(keyStore, blockchain, txPool,
     storagesInstance.storages.appStateStorage, blockchainConfig, txPoolConfig)
 }
 
@@ -421,7 +421,7 @@ trait SyncControllerBuilder {
     BlockchainConfigBuilder with
     LedgerBuilder with
     PeerEventBusBuilder with
-    PendingTransactionsManagerBuilder with
+    TxPoolBuilder with
     OmmersPoolBuilder with
     EtcPeerManagerActorBuilder with
     SyncConfigBuilder with
@@ -436,7 +436,7 @@ trait SyncControllerBuilder {
       ledger,
       consensus.validators,
       peerEventBus,
-      pendingTransactionsManager,
+      txPool,
       ommersPool,
       etcPeerManager,
       syncConfig,
@@ -515,7 +515,7 @@ trait Node extends NodeKeyBuilder
   with BlockchainConfigBuilder
   with VmConfigBuilder
   with PeerEventBusBuilder
-  with PendingTransactionsManagerBuilder
+  with TxPoolBuilder
   with OmmersPoolBuilder
   with EtcPeerManagerActorBuilder
   with BlockchainHostBuilder

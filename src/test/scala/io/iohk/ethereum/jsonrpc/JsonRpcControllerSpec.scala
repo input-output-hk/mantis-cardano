@@ -21,7 +21,7 @@ import io.iohk.ethereum.ledger.{BloomFilter, Ledger}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.ommers.OmmersPool.Ommers
-import io.iohk.ethereum.transactions.PendingTransactionsManager
+import io.iohk.ethereum.transactions.TransactionPool
 import io.iohk.ethereum.utils._
 import io.iohk.ethereum.{Fixtures, NormalPatience, Timeouts}
 import org.json4s.JsonAST._
@@ -556,8 +556,8 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
 
     val result: Future[JsonRpcResponse] = jsonRpcController.handleRequest(request)
 
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsManager.PendingTransactionsResponse(Nil))
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
+    txPool.reply(TransactionPool.PendingTransactionsResponse(Nil))
 
     ommersPool.expectMsg(OmmersPool.GetOmmers(2))
     ommersPool.reply(Ommers(Nil))
@@ -596,7 +596,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
 
     val result: Future[JsonRpcResponse] = jsonRpcController.handleRequest(request)
 
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
     ommersPool.expectMsg(OmmersPool.GetOmmers(2))
     //on time out it should respond with empty list
 
@@ -1477,7 +1477,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
 
     val keyStore = mock[KeyStore]
 
-    val pendingTransactionsManager = TestProbe()
+    val txPool = TestProbe()
     val ommersPool = TestProbe()
     val filterManager = TestProbe()
 
@@ -1499,7 +1499,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val personalService = mock[PersonalService]
     val ethService = new EthService(
       blockchain, appStateStorage, ledger,
-      keyStore, pendingTransactionsManager.ref, syncingController.ref, ommersPool.ref, filterManager.ref, filterConfig,
+      keyStore, txPool.ref, syncingController.ref, ommersPool.ref, filterManager.ref, filterConfig,
       blockchainConfig, currentProtocolVersion, config, vmConfig, getTransactionFromPoolTimeout)
     val jsonRpcController = new JsonRpcController(web3Service, netService, ethService, personalService, None, config)
 

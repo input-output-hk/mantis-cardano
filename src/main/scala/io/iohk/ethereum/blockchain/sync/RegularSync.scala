@@ -17,8 +17,8 @@ import io.iohk.ethereum.network.p2p.messages.CommonMessages.NewBlock
 import io.iohk.ethereum.network.p2p.messages.PV62._
 import io.iohk.ethereum.network.p2p.messages.PV63.{GetNodeData, NodeData}
 import io.iohk.ethereum.ommers.OmmersPool.{AddOmmers, RemoveOmmers}
-import io.iohk.ethereum.transactions.PendingTransactionsManager
-import io.iohk.ethereum.transactions.PendingTransactionsManager.{AddTransactions, RemoveTransactions}
+import io.iohk.ethereum.transactions.TransactionPool
+import io.iohk.ethereum.transactions.TransactionPool.{AddTransactions, RemoveTransactions}
 import io.iohk.ethereum.utils.Config.SyncConfig
 import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.utils.events._
@@ -34,7 +34,7 @@ class RegularSync(
     val etcPeerManager: ActorRef,
     val peerEventBus: ActorRef,
     val ommersPool: ActorRef,
-    val pendingTransactionsManager: ActorRef,
+    val txPool: ActorRef,
     val broadcaster: BlockBroadcast,
     val ledger: Ledger,
     val blockchain: Blockchain,
@@ -481,7 +481,7 @@ class RegularSync(
       log.info(s"[NewBetterBranch] ${headersLogInfo(headers)}, oldBranch: ${blocksLogInfo(oldBranch)}")
 
       val transactionsToAdd = oldBranch.flatMap(_.body.transactionList)
-      pendingTransactionsManager ! PendingTransactionsManager.AddTransactions(transactionsToAdd.toList)
+      txPool ! TransactionPool.AddTransactions(transactionsToAdd.toList)
       val hashes = headers.take(blockBodiesPerRequest).map(_.hash)
       requestBlockBodies(peer, GetBlockBodies(hashes))
 
@@ -654,11 +654,11 @@ class RegularSync(
 
   private def updateTxAndOmmerPools(blocksAdded: Seq[Block], blocksRemoved: Seq[Block]): Unit = {
     blocksRemoved.headOption.foreach(block => ommersPool ! AddOmmers(block.header))
-    blocksRemoved.foreach(block => pendingTransactionsManager ! AddTransactions(block.body.transactionList.toList))
+    blocksRemoved.foreach(block => txPool ! AddTransactions(block.body.transactionList.toList))
 
     blocksAdded.foreach { block =>
       ommersPool ! RemoveOmmers(block.header :: block.body.uncleNodesList.toList)
-      pendingTransactionsManager ! RemoveTransactions(block.body.transactionList)
+      txPool ! RemoveTransactions(block.body.transactionList)
     }
   }
 
@@ -676,9 +676,9 @@ class RegularSync(
 object RegularSync {
   // scalastyle:off parameter.number
   def props(appStateStorage: AppStateStorage, etcPeerManager: ActorRef, peerEventBus: ActorRef, ommersPool: ActorRef,
-      pendingTransactionsManager: ActorRef, broadcaster: BlockBroadcast, ledger: Ledger, blockchain: Blockchain,
+      txPool: ActorRef, broadcaster: BlockBroadcast, ledger: Ledger, blockchain: Blockchain,
       syncConfig: SyncConfig, scheduler: Scheduler): Props =
-    Props(new RegularSync(appStateStorage, etcPeerManager, peerEventBus, ommersPool, pendingTransactionsManager,
+    Props(new RegularSync(appStateStorage, etcPeerManager, peerEventBus, ommersPool, txPool,
       broadcaster, ledger, blockchain, syncConfig, scheduler))
 
   private[sync] case object ResumeRegularSync

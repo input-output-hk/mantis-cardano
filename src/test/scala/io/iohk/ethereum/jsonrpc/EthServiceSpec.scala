@@ -15,7 +15,7 @@ import io.iohk.ethereum.db.storage.{AppStateStorage, ArchiveNodeStorage}
 import io.iohk.ethereum.jsonrpc.EthService._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.ommers.OmmersPool
-import io.iohk.ethereum.transactions.PendingTransactionsManager
+import io.iohk.ethereum.transactions.TransactionPool
 import io.iohk.ethereum.utils._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FlatSpec, Matchers}
@@ -30,7 +30,7 @@ import io.iohk.ethereum.keystore.KeyStore
 import io.iohk.ethereum.ledger.Ledger.TxResult
 import io.iohk.ethereum.ledger.Ledger
 import io.iohk.ethereum.mpt.{ByteArrayEncoder, ByteArraySerializable, MerklePatriciaTrie}
-import io.iohk.ethereum.transactions.PendingTransactionsManager.{PendingTransaction, PendingTransactionsResponse}
+import io.iohk.ethereum.transactions.TransactionPool.{PendingTransaction, PendingTransactionsResponse}
 import org.scalamock.scalatest.MockFactory
 import org.spongycastle.util.encoders.Hex
 
@@ -381,8 +381,8 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     blockchain.save(parentBlock, Nil, parentBlock.header.difficulty, true)
 
     val response: ServiceResponse[GetWorkResponse] = ethService.getWork(GetWorkRequest())
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsManager.PendingTransactionsResponse(Nil))
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
+    txPool.reply(TransactionPool.PendingTransactionsResponse(Nil))
 
     ommersPool.expectMsg(OmmersPool.GetOmmers(1))
     ommersPool.reply(OmmersPool.Ommers(Nil))
@@ -722,8 +722,8 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val request = GetTransactionByHashRequest(txToRequestHash)
     val response = ethService.getTransactionByHash(request)
 
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsResponse(Nil))
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
+    txPool.reply(PendingTransactionsResponse(Nil))
 
     response.futureValue shouldEqual Right(GetTransactionByHashResponse(None))
   }
@@ -734,8 +734,8 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val request = GetTransactionByHashRequest(txToRequestHash)
     val response = ethService.getTransactionByHash(request)
 
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsResponse(Seq(PendingTransaction(txToRequest, System.currentTimeMillis))))
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
+    txPool.reply(PendingTransactionsResponse(Seq(PendingTransaction(txToRequest, System.currentTimeMillis))))
 
     response.futureValue shouldEqual Right(GetTransactionByHashResponse(Some(TransactionResponse(txToRequest))))
   }
@@ -749,8 +749,8 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val request = GetTransactionByHashRequest(txToRequestHash)
     val response = ethService.getTransactionByHash(request)
 
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsResponse(Nil))
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
+    txPool.reply(PendingTransactionsResponse(Nil))
 
     response.futureValue shouldEqual Right(GetTransactionByHashResponse(Some(
       TransactionResponse(txToRequest, Some(blockWithTx.header), Some(0)))))
@@ -814,8 +814,8 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val request = GetAccountTransactionsRequest(address, 3125360, 3125370)
 
     val response = ethService.getAccountTransactions(request)
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsResponse(Nil))
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
+    txPool.reply(PendingTransactionsResponse(Nil))
 
     val expectedTxs = Seq(
       TransactionResponse(
@@ -853,8 +853,8 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val request = GetAccountTransactionsRequest(address, 3125371, 3125381)
 
     val response = ethService.getAccountTransactions(request)
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsResponse(Seq(pendingTx)))
+    txPool.expectMsg(TransactionPool.GetPendingTransactions)
+    txPool.reply(PendingTransactionsResponse(Seq(pendingTx)))
 
     val expectedSent = Seq(TransactionResponse(signedTx, blockHeader = None, pending = Some(true), isOutgoing = Some(true)))
 
@@ -875,7 +875,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     override implicit lazy val system = ActorSystem("EthServiceSpec_System")
 
     val syncingController = TestProbe()
-    val pendingTransactionsManager = TestProbe()
+    val txPool = TestProbe()
     val ommersPool = TestProbe()
     val filterManager = TestProbe()
 
@@ -895,7 +895,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val jsonRpcConfig = JsonRpcConfig(Config.config)
 
     val ethService = new EthService(blockchain, appStateStorage, ledger,
-      keyStore, pendingTransactionsManager.ref, syncingController.ref, ommersPool.ref, filterManager.ref, filterConfig,
+      keyStore, txPool.ref, syncingController.ref, ommersPool.ref, filterManager.ref, filterConfig,
       blockchainConfig, currentProtocolVersion, jsonRpcConfig, vmConfig, getTransactionFromPoolTimeout)
 
     val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)

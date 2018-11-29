@@ -15,8 +15,8 @@ import io.iohk.ethereum.jsonrpc.EthService
 import io.iohk.ethereum.jsonrpc.EthService.SubmitHashRateRequest
 import io.iohk.ethereum.nodebuilder.Node
 import io.iohk.ethereum.ommers.OmmersPool
-import io.iohk.ethereum.transactions.PendingTransactionsManager
-import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransactionsResponse
+import io.iohk.ethereum.transactions.TransactionPool
+import io.iohk.ethereum.transactions.TransactionPool.PendingTransactionsResponse
 import io.iohk.ethereum.utils.BigIntExtensionMethods._
 import io.iohk.ethereum.utils.ByteUtils
 import org.spongycastle.util.encoders.Hex
@@ -29,7 +29,7 @@ import scala.util.{Failure, Random, Success, Try}
 class EthashMiner(
   blockchain: Blockchain,
   ommersPool: ActorRef,
-  pendingTransactionsManager: ActorRef,
+  txPool: ActorRef,
   syncController: ActorRef,
   ethService: EthService,
   consensus: EthashConsensus,
@@ -200,7 +200,7 @@ class EthashMiner(
   private def getTransactionsFromPool: Future[PendingTransactionsResponse] = {
     implicit val timeout = Timeout(getTransactionFromPoolTimeout)
 
-    (pendingTransactionsManager ? PendingTransactionsManager.GetPendingTransactions).mapTo[PendingTransactionsResponse]
+    (txPool ? TransactionPool.GetPendingTransactions).mapTo[PendingTransactionsResponse]
       .recover { case ex =>
         log.error(ex, "Failed to get transactions, mining block with empty transactions list")
         PendingTransactionsResponse(Nil)
@@ -212,7 +212,7 @@ object EthashMiner {
   private[ethash] def props(
     blockchain: Blockchain,
     ommersPool: ActorRef,
-    pendingTransactionsManager: ActorRef,
+    txPool: ActorRef,
     syncController: ActorRef,
     ethService: EthService,
     consensus: EthashConsensus,
@@ -220,7 +220,7 @@ object EthashMiner {
   ): Props =
     Props(
       new EthashMiner(
-        blockchain, ommersPool, pendingTransactionsManager, syncController, ethService, consensus,
+        blockchain, ommersPool, txPool, syncController, ethService, consensus,
         getTransactionFromPoolTimeout
       )
     )
@@ -231,7 +231,7 @@ object EthashMiner {
         val minerProps = props(
           ommersPool = node.ommersPool,
           blockchain = node.blockchain,
-          pendingTransactionsManager = node.pendingTransactionsManager,
+          txPool = node.txPool,
           syncController = node.syncController,
           ethService = node.ethService,
           consensus = consensus,

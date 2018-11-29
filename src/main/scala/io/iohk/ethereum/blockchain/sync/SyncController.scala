@@ -14,7 +14,7 @@ class SyncController(
     ledger: Ledger,
     validators: Validators,
     peerEventBus: ActorRef,
-    pendingTransactionsManager: ActorRef,
+    txPool: ActorRef,
     ommersPool: ActorRef,
     etcPeerManager: ActorRef,
     syncConfig: SyncConfig,
@@ -76,7 +76,7 @@ class SyncController(
 
   def startRegularSync(): Unit = {
     val regularSync = context.actorOf(RegularSync.props(appStateStorage, etcPeerManager,
-      peerEventBus, ommersPool, pendingTransactionsManager, new BlockBroadcast(etcPeerManager, syncConfig),
+      peerEventBus, ommersPool, txPool, new BlockBroadcast(etcPeerManager, syncConfig),
       ledger, blockchain, syncConfig, scheduler), "regular-sync")
     regularSync ! RegularSync.Start
     context become runningRegularSync(regularSync)
@@ -91,13 +91,13 @@ object SyncController {
             ledger: Ledger,
             validators: Validators,
             peerEventBus: ActorRef,
-            pendingTransactionsManager: ActorRef,
+            txPool: ActorRef,
             ommersPool: ActorRef,
             etcPeerManager: ActorRef,
             syncConfig: SyncConfig,
             shutdownFn: () => Unit):
   Props = Props(new SyncController(appStateStorage, blockchain, syncStateStorage, ledger, validators,
-    peerEventBus, pendingTransactionsManager, ommersPool, etcPeerManager, syncConfig, shutdownFn))
+    peerEventBus, txPool, ommersPool, etcPeerManager, syncConfig, shutdownFn))
 
   case object Start
 }

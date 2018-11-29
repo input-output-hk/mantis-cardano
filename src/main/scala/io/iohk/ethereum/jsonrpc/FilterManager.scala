@@ -8,8 +8,8 @@ import io.iohk.ethereum.domain._
 import io.iohk.ethereum.jsonrpc.EthService.BlockParam
 import io.iohk.ethereum.keystore.KeyStore
 import io.iohk.ethereum.ledger.BloomFilter
-import io.iohk.ethereum.transactions.PendingTransactionsManager
-import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransaction
+import io.iohk.ethereum.transactions.TransactionPool
+import io.iohk.ethereum.transactions.TransactionPool.PendingTransaction
 import io.iohk.ethereum.utils.{FilterConfig, TxPoolConfig}
 
 import scala.annotation.tailrec
@@ -22,7 +22,7 @@ class FilterManager(
     blockGenerator: BlockGenerator,
     appStateStorage: AppStateStorage,
     keyStore: KeyStore,
-    pendingTransactionsManager: ActorRef,
+    txPool: ActorRef,
     filterConfig: FilterConfig,
     txPoolConfig: TxPoolConfig,
     externalSchedulerOpt: Option[Scheduler] = None)
@@ -221,9 +221,9 @@ class FilterManager(
   }
 
   private def getPendingTransactions(): Future[Seq[PendingTransaction]] = {
-    (pendingTransactionsManager ? PendingTransactionsManager.GetPendingTransactions)
-      .mapTo[PendingTransactionsManager.PendingTransactionsResponse]
-      .flatMap { case PendingTransactionsManager.PendingTransactionsResponse(pendingTransactions) =>
+    (txPool ? TransactionPool.GetPendingTransactions)
+      .mapTo[TransactionPool.PendingTransactionsResponse]
+      .flatMap { case TransactionPool.PendingTransactionsResponse(pendingTransactions) =>
         keyStore.listAccounts() match {
           case Right(accounts) =>
             Future.successful(pendingTransactions.filter(pt => accounts.contains(pt.stx.senderAddress)))
@@ -249,10 +249,10 @@ object FilterManager {
             blockGenerator: BlockGenerator,
             appStateStorage: AppStateStorage,
             keyStore: KeyStore,
-            pendingTransactionsManager: ActorRef,
+            txPool: ActorRef,
             filterConfig: FilterConfig,
             txPoolConfig: TxPoolConfig): Props =
-    Props(new FilterManager(blockchain, blockGenerator, appStateStorage, keyStore, pendingTransactionsManager, filterConfig, txPoolConfig))
+    Props(new FilterManager(blockchain, blockGenerator, appStateStorage, keyStore, txPool, filterConfig, txPoolConfig))
 
   sealed trait Filter {
     def id: BigInt

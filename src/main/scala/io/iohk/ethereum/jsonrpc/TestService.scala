@@ -7,8 +7,8 @@ import io.iohk.ethereum.consensus.ConsensusConfig
 import io.iohk.ethereum.consensus.blocks._
 import io.iohk.ethereum.domain.{Address, Block, BlockchainImpl, UInt256}
 import io.iohk.ethereum.testmode.{TestLedgerWrapper, TestmodeConsensus}
-import io.iohk.ethereum.transactions.PendingTransactionsManager
-import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransactionsResponse
+import io.iohk.ethereum.transactions.TransactionPool
+import io.iohk.ethereum.transactions.TransactionPool.PendingTransactionsResponse
 import io.iohk.ethereum.utils.Logger
 import org.spongycastle.util.encoders.Hex
 
@@ -50,7 +50,7 @@ object TestService {
 
 class TestService(
     blockchain: BlockchainImpl,
-    pendingTransactionsManager: ActorRef,
+    txPool: ActorRef,
     consensusConfig: ConsensusConfig,
     consensus: TestmodeConsensus,
     testLedgerWrapper: TestLedgerWrapper)
@@ -96,7 +96,7 @@ class TestService(
       getBlockForMining(blockchain.getBestBlock()).map { blockForMining =>
         val res = testLedgerWrapper.ledger.importBlock(blockForMining.block)
         log.info("Block mining result: " + res)
-        pendingTransactionsManager ! PendingTransactionsManager.ClearPendingTransactions
+        txPool ! TransactionPool.ClearPendingTransactions
         consensus.blockTimestamp += 1
       }
     }
@@ -115,7 +115,7 @@ class TestService(
   }
 
   def rewindToBlock(request: RewindToBlockRequest): ServiceResponse[RewindToBlockResponse] = {
-    pendingTransactionsManager ! PendingTransactionsManager.ClearPendingTransactions
+    txPool ! TransactionPool.ClearPendingTransactions
     (blockchain.getBestBlockNumber() until request.blockNum by -1).foreach { n =>
       blockchain.removeBlock(blockchain.getBlockHeaderByNumber(n).get.hash, saveParentAsBestBlock = false)
     }
@@ -130,7 +130,7 @@ class TestService(
 
   private def getBlockForMining(parentBlock: Block): Future[PendingBlock] = {
     implicit val timeout = Timeout(5.seconds)
-    (pendingTransactionsManager ? PendingTransactionsManager.GetPendingTransactions)
+    (txPool ? TransactionPool.GetPendingTransactions)
       .mapTo[PendingTransactionsResponse]
       .recover { case _ => PendingTransactionsResponse(Nil) }
       .flatMap { pendingTxs =>

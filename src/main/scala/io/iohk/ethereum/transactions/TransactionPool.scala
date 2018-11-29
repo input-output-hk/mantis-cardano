@@ -3,6 +3,7 @@ package io.iohk.ethereum.transactions
 import akka.actor.{Actor, ActorRef, Cancellable, Props}
 import akka.util.{ByteString, Timeout}
 import io.iohk.ethereum.domain.SignedTransaction
+import io.iohk.ethereum.metrics.Metrics
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.MessageFromPeer
 import io.iohk.ethereum.network.PeerEventBusActor.SubscriptionClassifier.MessageClassifier
 import io.iohk.ethereum.network.PeerEventBusActor.{PeerEvent, PeerSelector, Subscribe, SubscriptionClassifier}
@@ -11,12 +12,13 @@ import io.iohk.ethereum.network.{EtcPeerManagerActor, Peer, PeerId, PeerManagerA
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.SignedTransactions
 import io.iohk.ethereum.utils.TxPoolConfig
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-object PendingTransactionsManager {
+object TransactionPool {
   def props(txPoolConfig: TxPoolConfig, peerManager: ActorRef, etcPeerManager: ActorRef, peerMessageBus: ActorRef): Props =
-    Props(new PendingTransactionsManager(txPoolConfig, peerManager, etcPeerManager, peerMessageBus))
+    Props(new TransactionPool(txPoolConfig, peerManager, etcPeerManager, peerMessageBus))
 
   case class AddTransactions(signedTransactions: List[SignedTransaction])
 
@@ -38,11 +40,13 @@ object PendingTransactionsManager {
   case object ClearPendingTransactions
 }
 
-class PendingTransactionsManager(txPoolConfig: TxPoolConfig, peerManager: ActorRef,
+class TransactionPool(txPoolConfig: TxPoolConfig, peerManager: ActorRef,
                                  etcPeerManager: ActorRef, peerEventBus: ActorRef) extends Actor {
 
-  import PendingTransactionsManager._
+  import TransactionPool._
   import akka.pattern.ask
+
+  private val metrics = new TxPoolMetrics(Metrics.get(), getTxsRepeated _, getMaxProvisions _)
 
   /**
     * stores all pending transactions
@@ -58,6 +62,12 @@ class PendingTransactionsManager(txPoolConfig: TxPoolConfig, peerManager: ActorR
     * stores transactions timeouts by tx hash
     */
   var timeouts: Map[ByteString, Cancellable] = Map.empty
+
+  /**
+    * How many times a TX has been provided for execution.
+    * If greater than 1 it may indicate a problematic TX
+    */
+  val txProvisions: mutable.Map[ByteString, Int] = mutable.Map.empty.withDefaultValue(0)
 
   implicit val timeout = Timeout(3.seconds)
 
@@ -105,18 +115,24 @@ class PendingTransactionsManager(txPoolConfig: TxPoolConfig, peerManager: ActorR
         }
 
     case GetPendingTransactions =>
+      pendingTransactions.foreach { ptx =>
+        txProvisions(ptx.stx.hash) += 1
+      }
       sender() ! PendingTransactionsResponse(pendingTransactions)
 
     case RemoveTransactions(signedTransactions) =>
       pendingTransactions = pendingTransactions.filterNot(pt => signedTransactions.contains(pt.stx))
       knownTransactions = knownTransactions.filterNot(signedTransactions.map(_.hash).contains)
       signedTransactions.foreach(clearTimeout)
+      signedTransactions.foreach(txProvisions -= _.hash)
 
     case MessageFromPeer(SignedTransactions(signedTransactions), peerId) =>
       self ! AddTransactions(signedTransactions.toList)
       signedTransactions.foreach(setTxKnown(_, peerId))
 
     case ClearPendingTransactions =>
+      pendingTransactions.foreach(ptx => clearTimeout(ptx.stx))
+      pendingTransactions.foreach(txProvisions -= _.stx.hash)
       pendingTransactions = Nil
   }
 
@@ -139,5 +155,11 @@ class PendingTransactionsManager(txPoolConfig: TxPoolConfig, peerManager: ActorR
     val newPeers = currentPeers + peerId
     knownTransactions += (signedTransaction.hash -> newPeers)
   }
+
+  private def getMaxProvisions: Double =
+    (0 +: txProvisions.values.toList).max
+
+  private def getTxsRepeated: Double =
+    txProvisions.count(_._2 > 1)
 
 }

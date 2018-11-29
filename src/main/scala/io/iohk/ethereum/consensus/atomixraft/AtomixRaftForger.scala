@@ -12,8 +12,8 @@ import io.iohk.ethereum.consensus.blocks.PendingBlock
 import io.iohk.ethereum.domain.{Address, Block, Blockchain}
 import io.iohk.ethereum.metrics.Metrics
 import io.iohk.ethereum.nodebuilder.Node
-import io.iohk.ethereum.transactions.PendingTransactionsManager
-import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransactionsResponse
+import io.iohk.ethereum.transactions.TransactionPool
+import io.iohk.ethereum.transactions.TransactionPool.PendingTransactionsResponse
 import io.iohk.ethereum.utils.events._
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -23,7 +23,7 @@ import scala.util.{Failure, Success}
 
 class AtomixRaftForger(
   blockchain: Blockchain,
-  pendingTransactionsManager: ActorRef,
+  txPool: ActorRef,
   syncController: ActorRef,
   consensus: AtomixRaftConsensus,
   getTransactionFromPoolTimeout: FiniteDuration
@@ -137,7 +137,7 @@ class AtomixRaftForger(
   private def getTransactionsFromPool = {
     implicit val timeout: Timeout = getTransactionFromPoolTimeout
 
-    (pendingTransactionsManager ? PendingTransactionsManager.GetPendingTransactions).mapTo[PendingTransactionsResponse]
+    (txPool ? TransactionPool.GetPendingTransactions).mapTo[PendingTransactionsResponse]
       .recover { case ex =>
         log.error(ex, "Failed to get transactions, forging block with empty transactions list")
         PendingTransactionsResponse(Nil)
@@ -154,14 +154,14 @@ object AtomixRaftForger {
 
   private def props(
     blockchain: Blockchain,
-    pendingTransactionsManager: ActorRef,
+    txPool: ActorRef,
     syncController: ActorRef,
     consensus: AtomixRaftConsensus,
     getTransactionFromPoolTimeout: FiniteDuration
   ): Props =
     Props(
       new AtomixRaftForger(
-        blockchain, pendingTransactionsManager, syncController, consensus,
+        blockchain, txPool, syncController, consensus,
         getTransactionFromPoolTimeout
       )
     )
@@ -171,7 +171,7 @@ object AtomixRaftForger {
       case consensus: AtomixRaftConsensus ⇒
         val minerProps = props(
           blockchain = node.blockchain,
-          pendingTransactionsManager = node.pendingTransactionsManager,
+          txPool = node.txPool,
           syncController = node.syncController,
           consensus = consensus,
           getTransactionFromPoolTimeout = node.txPoolConfig.getTransactionFromPoolTimeout

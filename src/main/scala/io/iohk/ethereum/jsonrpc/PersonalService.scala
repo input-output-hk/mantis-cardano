@@ -13,8 +13,8 @@ import io.iohk.ethereum.jsonrpc.PersonalService._
 import io.iohk.ethereum.keystore.{KeyStore, Wallet}
 import io.iohk.ethereum.jsonrpc.JsonRpcErrors._
 import io.iohk.ethereum.rlp.RLPList
-import io.iohk.ethereum.transactions.PendingTransactionsManager
-import io.iohk.ethereum.transactions.PendingTransactionsManager.{AddOrOverrideTransaction, PendingTransactionsResponse}
+import io.iohk.ethereum.transactions.TransactionPool
+import io.iohk.ethereum.transactions.TransactionPool.{AddOrOverrideTransaction, PendingTransactionsResponse}
 import io.iohk.ethereum.utils.{BlockchainConfig, TxPoolConfig}
 import io.iohk.ethereum.rlp
 import io.iohk.ethereum.rlp.RLPImplicits._
@@ -198,7 +198,7 @@ class PersonalService(
   private def sendTransaction(request: TransactionRequest, wallet: Wallet): Future[ByteString] = {
     implicit val timeout = Timeout(txPoolConfig.pendingTxManagerQueryTimeout)
 
-    val pendingTxsFuture = (txPool ? PendingTransactionsManager.GetPendingTransactions).mapTo[PendingTransactionsResponse]
+    val pendingTxsFuture = (txPool ? TransactionPool.GetPendingTransactions).mapTo[PendingTransactionsResponse]
     val latestPendingTxNonceFuture: Future[Option[BigInt]] = pendingTxsFuture.map { pendingTxs =>
       val senderTxsNonces = pendingTxs.pendingTransactions
         .collect { case ptx if ptx.stx.senderAddress == wallet.address => ptx.stx.tx.nonce }

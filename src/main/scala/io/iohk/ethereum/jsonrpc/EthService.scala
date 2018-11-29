@@ -24,8 +24,8 @@ import io.iohk.ethereum.rlp.RLPImplicitConversions._
 import io.iohk.ethereum.rlp.RLPImplicits._
 import io.iohk.ethereum.rlp.RLPList
 import io.iohk.ethereum.rlp.UInt256RLPImplicits._
-import io.iohk.ethereum.transactions.PendingTransactionsManager
-import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransactionsResponse
+import io.iohk.ethereum.transactions.TransactionPool
+import io.iohk.ethereum.transactions.TransactionPool.PendingTransactionsResponse
 import io.iohk.ethereum.utils.VmConfig.ExternalConfig
 import io.iohk.ethereum.utils._
 import org.spongycastle.util.encoders.Hex
@@ -192,7 +192,7 @@ class EthService(
     appStateStorage: AppStateStorage,
     ledger: Ledger,
     keyStore: KeyStore,
-    pendingTransactionsManager: ActorRef,
+    txPool: ActorRef,
     syncingController: ActorRef,
     ommersPool: ActorRef,
     filterManager: ActorRef,
@@ -515,7 +515,7 @@ class EthService(
   private def getTransactionsFromPool: Future[PendingTransactionsResponse] = {
     implicit val timeout = Timeout(getTransactionFromPoolTimeout)
 
-    (pendingTransactionsManager ? PendingTransactionsManager.GetPendingTransactions).mapTo[PendingTransactionsResponse]
+    (txPool ? TransactionPool.GetPendingTransactions).mapTo[PendingTransactionsResponse]
       .recover { case ex =>
         log.error("failed to get transactions, mining block with empty transactions list", ex)
         PendingTransactionsResponse(Nil)
@@ -569,7 +569,7 @@ class EthService(
       case Success(signedTransaction) =>
 
         def processTx(): ServiceResponse[SendRawTransactionResponse] = {
-          pendingTransactionsManager ! PendingTransactionsManager.AddOrOverrideTransaction(signedTransaction)
+          txPool ! TransactionPool.AddOrOverrideTransaction(signedTransaction)
           Future.successful(Right(SendRawTransactionResponse(signedTransaction.hash)))
         }
 

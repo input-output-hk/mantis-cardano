@@ -437,7 +437,7 @@ class SyncControllerSpec extends FlatSpec with Matchers with BeforeAndAfter with
       storagesInstance.storages.fastSyncStateStorage,
       ledger,
       new Mocks.MockValidatorsAlwaysSucceed,
-      peerMessageBus.ref, pendingTransactionsManager.ref, ommersPool.ref, etcPeerManager.ref,
+      peerMessageBus.ref, txPool.ref, ommersPool.ref, etcPeerManager.ref,
       syncConfig,
       () => (),
       externalSchedulerOpt = None)))
@@ -486,7 +486,7 @@ class SyncControllerSpec extends FlatSpec with Matchers with BeforeAndAfter with
       case Subscribe(PeerDisconnectedClassifier(_)) => true
       case Unsubscribe(Some(PeerDisconnectedClassifier(_))) => true
     }
-    val pendingTransactionsManager = TestProbe()
+    val txPool = TestProbe()
     val ommersPool = TestProbe()
 
     lazy val defaultSyncConfig = SyncConfig(
@@ -529,7 +529,7 @@ class SyncControllerSpec extends FlatSpec with Matchers with BeforeAndAfter with
       storagesInstance.storages.fastSyncStateStorage,
       ledger,
       validators,
-      peerMessageBus.ref, pendingTransactionsManager.ref, ommersPool.ref, etcPeerManager.ref,
+      peerMessageBus.ref, txPool.ref, ommersPool.ref, etcPeerManager.ref,
       syncConfig,
       () => (),
       externalSchedulerOpt = None)))

@@ -17,7 +17,7 @@ import io.iohk.ethereum.jsonrpc.EthService.SubmitHashRateResponse
 import io.iohk.ethereum.ledger.Ledger.VMImpl
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.ommers.OmmersPool
-import io.iohk.ethereum.transactions.PendingTransactionsManager
+import io.iohk.ethereum.transactions.TransactionPool
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers, Tag}
 import org.spongycastle.util.encoders.Hex
@@ -43,9 +43,9 @@ class EthashMinerSpec extends FlatSpec with Matchers {
       }
     })
 
-    pendingTransactionsManager.setAutoPilot(new TestActor.AutoPilot {
+    txPool.setAutoPilot(new TestActor.AutoPilot {
       def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = {
-        sender ! PendingTransactionsManager.PendingTransactionsResponse(Nil)
+        sender ! TransactionPool.PendingTransactionsResponse(Nil)
         TestActor.KeepRunning
       }
     })
@@ -140,7 +140,7 @@ class EthashMinerSpec extends FlatSpec with Matchers {
     override implicit lazy val system = ActorSystem("MinerSpec_System")
 
     val ommersPool = TestProbe()
-    val pendingTransactionsManager = TestProbe()
+    val txPool = TestProbe()
     val syncController = TestProbe()
 
     val ethService = mock[EthService]
@@ -148,7 +148,7 @@ class EthashMinerSpec extends FlatSpec with Matchers {
 
 
     val miner = TestActorRef(EthashMiner.props(
-      blockchain, ommersPool.ref, pendingTransactionsManager.ref,
+      blockchain, ommersPool.ref, txPool.ref,
       syncController.ref, ethService, consensus, getTransactionFromPoolTimeout))
 
     def waitForMinedBlock(): Block = {
