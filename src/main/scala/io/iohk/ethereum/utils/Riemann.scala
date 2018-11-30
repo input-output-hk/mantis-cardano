@@ -201,7 +201,7 @@ class RiemannBatchClient(config: RiemannConfiguration) extends IRiemannClient wi
   private var sendExecutor: ScheduledExecutorService = null
 
   private def tryConnect(times: Int): Unit = {
-    if (times < 5) {
+    if (times < 1) {
       try {
         client.reconnect()
       } catch {

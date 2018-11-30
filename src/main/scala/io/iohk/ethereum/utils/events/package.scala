@@ -20,6 +20,8 @@ package object events {
 
     def peerId(peerId: PeerId): EventDSL = event.attribute(EventAttr.PeerId, peerId.value)
 
+    def updateWith(f: EventDSL ⇒ EventDSL): EventDSL = f(event)
+
     def header(header: BlockHeader): EventDSL =
       event
         .attribute("header", header.number)
@@ -49,6 +51,7 @@ package object events {
   }
 
   object EventTag {
+    final val Batch = "batch"
     final val BlockForge = "blockForge"
     final val BlockImport = "blockImport"
     final val Exception = "exception"
@@ -59,12 +62,16 @@ package object events {
   }
 
   object EventAttr {
+    final val BatchIndex = "batchIndex"
+    final val BatchSize = "batchSize"
     final val Count = "count"
     final val Error = "error"
     final val File = "file"
     final val Id = "id"
+    final val IsBatch = "isBatch"
     final val PeerId = "peerId"
     final val Resource = "resource"
+    final val IP = "ip"
     final val Status = "status"
     final val ThreadId = "threadId"
     final val ThreadName = "threadName"
@@ -73,5 +80,6 @@ package object events {
     final val TimeUnit = "timeUnit"
     final val Type = "type"
     final val Unit = "unit"
+    final val Uuid = "uuid"
   }
 }

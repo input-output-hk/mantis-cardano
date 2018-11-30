@@ -9,9 +9,8 @@ import io.iohk.ethereum.metrics.Metrics
 import io.iohk.ethereum.network.discovery.DiscoveryListener
 import io.iohk.ethereum.network.{PeerManagerActor, ServerActor}
 import io.iohk.ethereum.testmode.{TestLedgerBuilder, TestmodeConsensusBuilder}
-import io.iohk.ethereum.utils.{Config, JsonUtils, Riemann, Scheduler}
+import io.iohk.ethereum.utils.{Config, JsonUtils, Scheduler}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.util.{Failure, Success, Try}
 
@@ -80,19 +79,18 @@ abstract class BaseNode extends Node {
     log.info(s"buildInfo = \n$json")
   }
 
+  // FIXME This `var` needs another look.
   private var sendExecutor: ScheduledExecutorService = null
 
+  // FIXME This is not the build info sender anymore...
   private[this] def startBuildInfoSender(): ScheduledExecutorService = {
     Scheduler.startRunner(
       Config.healthIntervalMilliseconds,
       TimeUnit.MILLISECONDS,
       () => {
-        Riemann.ok("health buildinfo")
-          .attributes(MantisBuildInfo.toMap.mapValues { v => v.toString() }.asJava)
-          .send()
-
         jsonRpcController.healthcheck()
-    })
+      }
+    )
   }
 
   def start(): Unit = {

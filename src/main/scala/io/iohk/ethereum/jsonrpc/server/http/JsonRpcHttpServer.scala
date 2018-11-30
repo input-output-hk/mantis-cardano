@@ -1,6 +1,7 @@
 package io.iohk.ethereum.jsonrpc.server.http
 
 import java.security.SecureRandom
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
@@ -16,6 +17,7 @@ import io.iohk.ethereum.buildinfo.MantisBuildInfo
 import io.iohk.ethereum.jsonrpc._
 import io.iohk.ethereum.jsonrpc.server.SslSetup.CertificateConfig
 import io.iohk.ethereum.metrics.Metrics
+import io.iohk.ethereum.utils.events._
 import io.iohk.ethereum.utils.{ConfigUtils, JsonUtils, Logger}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.{DefaultFormats, native}
@@ -25,12 +27,14 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}
 
-trait JsonRpcHttpServer extends Json4sSupport with Logger {
+trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
   val jsonRpcController: JsonRpcController
 
   implicit val serialization = native.Serialization
 
   implicit val formats = DefaultFormats
+
+  protected def mainService: String = "jsonrpc http"
 
   def corsAllowedOrigins: HttpOriginRange
   def maxContentLength: Long
@@ -145,18 +149,95 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger {
     complete(httpResponseF)
   }
 
+  private def updateEventWithMeta(
+    event: EventDSL,
+    uuid: UUID,
+    isBatch: Boolean,
+    batchIndex: Int, // which item from the batch. First is 1. Sorry.
+    batchSize: Int,  // how many requests in the batch
+    ip: RemoteAddress,
+    requestId: String
+  ): EventDSL = {
+    val requestUUid = uuid.toString
+
+    event
+      .attribute(EventAttr.Uuid, requestUUid)
+      .attribute(EventAttr.IsBatch, isBatch.toString)
+      .tag(requestUUid)
+      .attribute(EventAttr.IP, ip.toString)
+      .attribute(EventAttr.Id, requestId)
+
+    if(isBatch) {
+      event
+        .tag(EventTag.Batch)
+        .attribute(EventAttr.BatchIndex, batchIndex)
+        .attribute(EventAttr.BatchSize, batchSize)
+    }
+
+    event
+  }
+
+  private def updateEventWithRequest(event: EventDSL, request: JsonRpcRequest): EventDSL = {
+    val requestJson = serialization.write(request)
+    event
+      .attribute("requestMethod", request.method)
+      .attribute("requestObj", request.toString)
+      .attribute("requestJson", requestJson)
+  }
+
+  private def updateEventWithResponse(event: EventDSL, response: JsonRpcResponse): EventDSL = {
+    val responseJson = serialization.write(response)
+    event
+      .attribute("responseObj", response.toString)
+      .attribute("responseJson", responseJson)
+  }
+
+  // scalastyle:off method.length
+  private def handleRequestInternal(
+    uuid: UUID,
+    isBatch: Boolean,
+    batchIndex: Int, // which item from the batch. First is 1. If you use 0, it means the batch as a whole.
+    batchSize: Int,  // how many requests in the batch
+    request: JsonRpcRequest,
+    ip: RemoteAddress
+  ): Future[JsonRpcResponse] = {
+
+    val requestIdOpt = request.id.flatMap(_.extractOpt[String])
+    val requestId = requestIdOpt.getOrElse("")
+    val requestUUid = uuid.toString
+    val requestJson = serialization.write(request)
+
+    val metaUpdater = updateEventWithMeta(_: EventDSL, uuid, isBatch, batchIndex, batchSize, ip, requestId)
+    val requestUpdater = updateEventWithRequest(_: EventDSL, request)
+
+    Event.okStart() // FIXME we need an extra string here to designate we are in "handleRequest"
+      .updateWith(metaUpdater)
+      .updateWith(requestUpdater)
+      .send()
+
+    val responseF: Future[JsonRpcResponse] = jsonRpcController.handleRequest(request)
+
+    responseF.andThen {
+      case Success(response) =>
+        val responseJson = serialization.write(response)
+        Event.okFinish()
+          .updateWith(metaUpdater)
+          .updateWith(updateEventWithResponse(_, response))
+          .send()
+
+      case Failure(ex) =>
+        Event.exceptionFinish(ex)
+          .updateWith(metaUpdater)
+          .updateWith(requestUpdater)
+          .send()
+
+    }
+  }
+
   private def handleRequest(request: JsonRpcRequest) = extractClientIP { ip =>
     complete {
-      val requestId = request.id.flatMap(_.extractOpt[String]).getOrElse("n/a")
-
-      log.info(s"Processing new JSON RPC request [$requestId] from [$ip]:\n ${serialization.write(request)}")
-
-      val responseF = jsonRpcController.handleRequest(request)
-
-      responseF.andThen {
-        case Success(_) => log.info(s"Request [$requestId] successful")
-        case Failure(ex) => log.error(s"Request [$requestId] failed", ex)
-      }
+      val uuid = UUID.randomUUID()
+      handleRequestInternal(uuid, false, 1, 1, request, ip)
     }
   }
 
@@ -164,15 +245,34 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger {
     complete {
       val requestId = requests.map(_.id.flatMap(_.extractOpt[String]).getOrElse("n/a")).mkString(",")
 
-      log.info(s"Processing new JSON RPC batch request [$requestId] from [$ip]:\n ${requests.map(r => serialization.write(r)).mkString("\n")}")
+      val uuid = UUID.randomUUID() // one UUID for the whole batch, since it is one request from the user's POV.
+      val batchSize = requests.size
 
-      val responseF = Future.sequence(requests.map { request =>
-        jsonRpcController.handleRequest(request)
+      val metaUpdater = updateEventWithMeta(_: EventDSL, uuid, true, 0, batchSize, ip, requestId)
+
+      Event.okStart()
+        .updateWith(metaUpdater)
+        .send()
+
+      val requestItems = for {
+        (r, i) <- requests.zipWithIndex
+      } yield (r, i + 1) // 1-based index
+
+      val responseF: Future[Seq[JsonRpcResponse]] = Future.sequence(requestItems.map { case (request, batchIndex) =>
+        handleRequestInternal(uuid, true, batchIndex, batchSize, request, ip)
       })
 
       responseF.andThen {
-        case Success(_) => log.info(s"Batch request [$requestId] successful")
-        case Failure(ex) => log.error(s"Batch request [$requestId] failed", ex)
+        case Success(_) =>
+          Event.okFinish()
+            .updateWith(metaUpdater)
+            .send()
+
+        case Failure(ex) =>
+          Event.exceptionFinish(ex)
+            .updateWith(metaUpdater)
+            .send()
+
       }
     }
   }
