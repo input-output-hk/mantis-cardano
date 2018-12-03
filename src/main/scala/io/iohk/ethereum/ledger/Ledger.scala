@@ -234,6 +234,11 @@ class LedgerImpl(
     val staleBlocksWithReceiptsAndTDs = removeBlocksUntil(parent, bestNumber).reverse
     val staleBlocks = staleBlocksWithReceiptsAndTDs.map(_._1)
 
+    // this doesn't seem to change anything
+    // see BlockImportSpec, BlockchainImpl#removeBlock and BlockchainImpl#removeBlockNumberMapping
+
+    // staleBlocks.headOption.foreach(b => blockchain.saveBestBlockNumber(b.header.number - 1))
+
     for (block <- staleBlocks) yield blockQueue.enqueueBlock(block)
 
     val (executedBlocks, maybeError) = executeBlocks(newBranch, parentTd)
@@ -304,7 +309,7 @@ class LedgerImpl(
     * Remove blocks from the [[Blockchain]] along with receipts and total difficulties
     * @param parent remove blocks until this hash (exclusive)
     * @param fromNumber start removing from this number (downwards)
-    * @return the list of removed blocks along with receipts and total difficulties
+    * @return the list of removed blocks along with receipts and total difficulties (order: block numbers decreasing)
     */
   private def removeBlocksUntil(parent: ByteString, fromNumber: BigInt): List[(Block, Seq[Receipt], BigInt)] = {
     blockchain.getBlockByNumber(fromNumber) match {
