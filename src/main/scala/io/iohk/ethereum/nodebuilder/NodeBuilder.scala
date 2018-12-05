@@ -37,6 +37,7 @@ import io.iohk.ethereum.utils.Config.SyncConfig
 import io.iohk.ethereum.utils._
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Failure, Success, Try}
 
 // scalastyle:off number.of.types
 trait BlockchainConfigBuilder {
@@ -465,6 +466,15 @@ trait ShutdownHookBuilder { self: Logger ⇒
     }
   })
 
+  def shutdownOnError[A](f: ⇒ A): A = {
+    Try(f) match {
+      case Success(v) ⇒ v
+      case Failure(t) ⇒
+        log.error(t.getMessage, t)
+        shutdown()
+        throw t
+    }
+  }
 }
 
 object ShutdownHookBuilder extends ShutdownHookBuilder with Logger

@@ -2,7 +2,6 @@ package io.iohk.ethereum.utils
 
 import java.io.{IOException, PrintWriter}
 import java.net.InetAddress
-import java.util
 import java.util.LinkedList
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, ScheduledExecutorService, TimeUnit}
 
@@ -17,33 +16,47 @@ import scala.collection.JavaConverters._
 
 trait Riemann extends Logger {
 
-
   private val hostName = Config.riemann
     .map(_.hostName)
     .getOrElse(InetAddress.getLocalHost().getHostName())
 
-  private val riemannClient: IRiemannClient = new IRiemannClient {
-    override def sendEvent(event: Event): IPromise[Msg] = new Promise[Msg]()
-    override def sendEvents(events: Event*): IPromise[Msg] = new Promise[Msg]()
-    override def sendEvents(events: util.List[Event]): IPromise[Msg] = new Promise[Msg]()
-    override def sendException(service: String, t: Throwable): IPromise[Msg] = new Promise[Msg]()
-    override def query(q: String): IPromise[util.List[Event]] = new Promise[util.List[Event]]()
-    override def event(): EventDSL = new EventDSL(this)
-    override def sendMessage(msg: Msg): IPromise[Msg] = new Promise[Msg]()
-    override def isConnected: Boolean = false
-    override def connect(): Unit = {}
-    override def reconnect(): Unit = {}
-    override def flush(): Unit = {}
-    override def close(): Unit = {}
-    override def transport(): Transport = new Transport {
-      override def isConnected: Boolean = false
-      override def connect(): Unit = {}
-      override def reconnect(): Unit = {}
-      override def flush(): Unit = {}
-      override def close(): Unit = {}
-      override def transport(): Transport = this
+  private val riemannClient: IRiemannClient = {
+    log.debug("create new RiemannClient")
+
+    def stdoutClient(): IRiemannClient = {
+      log.info("create new stdout riemann client")
+      val client = new RiemannStdoutClient()
+      client.connect()
+      client
     }
+
+    val c = {
+      Config.riemann match {
+        case Some(config) => {
+          log.info(s"create new riemann batch client connecting to ${config.host}:${config.port}")
+
+          try {
+            val client = new RiemannBatchClient(config)
+            client.connect()
+            client
+          } catch {
+            case e: IOException =>
+              log.error("failed to create riemann batch client, falling back to stdout client", e)
+              System.exit(1)
+              stdoutClient()
+          }
+        }
+        case None => {
+          stdoutClient()
+        }
+      }
+    }
+
+    log.debug("riemann client connected")
+
+    c
   }
+
   def hostForEvents: String = hostName
 
   def get(): IRiemannClient = riemannClient
@@ -308,4 +321,3 @@ class RiemannStdoutClient extends IRiemannClient {
 trait ToRiemann {
   def toRiemann: EventDSL
 }
-
