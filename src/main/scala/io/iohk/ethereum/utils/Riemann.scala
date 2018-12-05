@@ -13,6 +13,7 @@ import io.riemann.riemann.client._
 import org.apache.commons.io.output.StringBuilderWriter
 
 import scala.collection.JavaConverters._
+import scala.util.{Failure, Success, Try}
 
 trait Riemann extends Logger {
 
@@ -30,15 +31,15 @@ trait Riemann extends Logger {
       case Some(config) => {
         log.info(s"create new riemann batch client connecting to ${config.host}:${config.port}")
 
-        try {
+        Try {
           val client = new RiemannBatchClient(config)
           client.connect()
           log.debug("riemann client connected")
           client
-        } catch {
-          case e: IOException =>
-            log.error("failed to create riemann batch client, falling back to stdout client", e)
-            System.exit(1)
+        } match {
+          case Success(client) => client
+          case Failure(ex) =>
+            log.error("failed to create riemann batch client, falling back to stdout client", ex)
             stdoutClient()
         }
       }
