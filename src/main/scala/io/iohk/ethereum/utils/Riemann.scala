@@ -16,13 +16,9 @@ import scala.collection.JavaConverters._
 
 trait Riemann extends Logger {
 
-  private val hostName = Config.riemann
-    .map(_.hostName)
-    .getOrElse(InetAddress.getLocalHost().getHostName())
+  private var riemannClient: IRiemannClient = _
 
-  private val riemannClient: IRiemannClient = {
-    log.debug("create new RiemannClient")
-
+  def init(): Unit = {
     def stdoutClient(): IRiemannClient = {
       log.info("create new stdout riemann client")
       val client = new RiemannStdoutClient()
@@ -30,32 +26,31 @@ trait Riemann extends Logger {
       client
     }
 
-    val c = {
-      Config.riemann match {
-        case Some(config) => {
-          log.info(s"create new riemann batch client connecting to ${config.host}:${config.port}")
+    val client = Config.riemann match {
+      case Some(config) => {
+        log.info(s"create new riemann batch client connecting to ${config.host}:${config.port}")
 
-          try {
-            val client = new RiemannBatchClient(config)
-            client.connect()
-            client
-          } catch {
-            case e: IOException =>
-              log.error("failed to create riemann batch client, falling back to stdout client", e)
-              System.exit(1)
-              stdoutClient()
-          }
-        }
-        case None => {
-          stdoutClient()
+        try {
+          val client = new RiemannBatchClient(config)
+          client.connect()
+          log.debug("riemann client connected")
+          client
+        } catch {
+          case e: IOException =>
+            log.error("failed to create riemann batch client, falling back to stdout client", e)
+            System.exit(1)
+            stdoutClient()
         }
       }
+      case None => stdoutClient()
     }
 
-    log.debug("riemann client connected")
-
-    c
+    riemannClient = client
   }
+
+  private val hostName = Config.riemann
+    .map(_.hostName)
+    .getOrElse(InetAddress.getLocalHost.getHostName)
 
   def hostForEvents: String = hostName
 

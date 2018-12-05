@@ -9,7 +9,7 @@ import io.iohk.ethereum.metrics.Metrics
 import io.iohk.ethereum.network.discovery.DiscoveryListener
 import io.iohk.ethereum.network.{PeerManagerActor, ServerActor}
 import io.iohk.ethereum.testmode.{TestLedgerBuilder, TestmodeConsensusBuilder}
-import io.iohk.ethereum.utils.{Config, JsonUtils, Scheduler}
+import io.iohk.ethereum.utils.{Config, JsonUtils, Riemann, Scheduler}
 
 import scala.concurrent.Await
 import scala.util.{Failure, Success, Try}
@@ -95,6 +95,8 @@ abstract class BaseNode extends Node {
 
   def start(): Unit = {
     logBuildInfo()
+
+    Riemann.init()
 
     startMetrics()
 
