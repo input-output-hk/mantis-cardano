@@ -17,16 +17,11 @@ import scala.util.{Failure, Success, Try}
 
 trait Riemann extends Logger {
 
-  private var riemannClient: IRiemannClient = _
+  private val fallbackRiemannClient = createStdoutClient()
+
+  private var riemannClient: IRiemannClient = fallbackRiemannClient
 
   def init(): Unit = {
-    def stdoutClient(): IRiemannClient = {
-      log.info("create new stdout riemann client")
-      val client = new RiemannStdoutClient()
-      client.connect()
-      client
-    }
-
     val client = Config.riemann match {
       case Some(config) => {
         log.info(s"create new riemann batch client connecting to ${config.host}:${config.port}")
@@ -40,13 +35,20 @@ trait Riemann extends Logger {
           case Success(client) => client
           case Failure(ex) =>
             log.error("failed to create riemann batch client, falling back to stdout client", ex)
-            stdoutClient()
+            fallbackRiemannClient
         }
       }
-      case None => stdoutClient()
+      case None => fallbackRiemannClient
     }
 
     riemannClient = client
+  }
+
+  private def createStdoutClient(): IRiemannClient = {
+    log.info("create new stdout riemann client")
+    val client = new RiemannStdoutClient()
+    client.connect()
+    client
   }
 
   private val hostName = Config.riemann
