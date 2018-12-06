@@ -1,7 +1,9 @@
 package io.iohk.ethereum.utils
 
+import akka.util.ByteString
 import io.iohk.ethereum.domain.{Block, BlockHeader}
 import io.iohk.ethereum.network.PeerId
+import io.iohk.ethereum.vm.ProgramError
 import org.spongycastle.util.encoders.Hex
 
 // Gathers together event-related stuff, so that you can easily import them all at once
@@ -20,6 +22,13 @@ package object events {
     def count(count: Int): EventDSL = attribute(EventAttr.Count, count)
 
     def peerId(peerId: PeerId): EventDSL = event.attribute(EventAttr.PeerId, peerId.value)
+
+    def programError(error: ProgramError): EventDSL = event.attribute(EventAttr.ProgramError, error.toString)
+
+    def hexByteString(name: String, value: ByteString): EventDSL = {
+      val valueHex = if(value.isEmpty) "" else "0x" + Hex.toHexString(value.toArray)
+      event.attribute(name, valueHex)
+    }
 
     def updateWith(f: EventDSL ⇒ EventDSL): EventDSL = f(event)
 
@@ -94,6 +103,7 @@ package object events {
     final val OldRole = "oldRole"
     final val PeerCount = "peerCount"
     final val PeerId = "peerId"
+    final val ProgramError = "programError"
     final val RequestMethod = "requestMethod"
     final val RequestJson = "requestJson"
     final val RequestObj = "requestObj"

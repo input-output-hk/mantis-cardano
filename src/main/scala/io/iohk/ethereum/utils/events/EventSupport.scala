@@ -45,12 +45,15 @@ trait EventSupport {
   }
 
   protected def warningStart(): EventDSL = warning(EventTag.Start).tag(EventTag.Start)
+  protected def warningFinish(): EventDSL = warning(EventTag.Finish).tag(EventTag.Finish)
 
   protected def error(moreService: String): EventDSL = {
     val service = mkService(moreService)
     val event = Riemann.warning(service)
     postProcessInternal(event)
   }
+
+  protected def errorFinish(): EventDSL = error(EventTag.Finish).tag(EventTag.Finish)
 
   protected def exception(moreService: String, t: Throwable): EventDSL = {
     val service = mkService(moreService)
