@@ -3,6 +3,7 @@ package io.iohk.ethereum.transactions
 import akka.actor.{Actor, ActorRef, Cancellable, Props}
 import akka.util.{ByteString, Timeout}
 import io.iohk.ethereum.domain.SignedTransaction
+import io.iohk.ethereum.eventbus.event.NewPendingTransaction
 import io.iohk.ethereum.metrics.Metrics
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.MessageFromPeer
 import io.iohk.ethereum.network.PeerEventBusActor.SubscriptionClassifier.MessageClassifier
