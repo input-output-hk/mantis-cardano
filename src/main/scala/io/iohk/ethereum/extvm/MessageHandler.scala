@@ -9,11 +9,10 @@ import com.trueaccord.scalapb.{GeneratedMessage, GeneratedMessageCompanion, Lite
 import org.spongycastle.util.BigIntegers
 
 import scala.concurrent.duration._
-import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{Await, ExecutionContext}
 import scala.util.Try
 
-class MessageHandler(in: SinkQueueWithCancel[ByteString], out: SourceQueueWithComplete[ByteString]) {
+class MessageHandler(in: SinkQueueWithCancel[ByteString], out: SourceQueueWithComplete[ByteString])(implicit ec: ExecutionContext) {
 
   private val AwaitTimeout = 5.minutes
 

@@ -25,7 +25,6 @@ import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.utils.events._
 
 import scala.annotation.tailrec
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
 
 //TODO Refactor to get rid of most of mutable state [EC-320]
@@ -45,6 +44,7 @@ class RegularSync(
 
   import RegularSync._
   import syncConfig._
+  import context.dispatcher
 
   private var headersQueue: Seq[BlockHeader] = Nil
   private var waitingForActor: Option[ActorRef] = None
