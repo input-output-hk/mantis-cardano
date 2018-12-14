@@ -149,7 +149,7 @@ abstract class BaseNode extends Node with EventSupport {
       tryAndLogFailure(jsonRpcIpcServer)(_.close())
     }
     if (jsonRpcConfig.websocketServerConfig.enabled) {
-      tryAndLogFailure(() => maybeJsonRpcWebsocketServer.map(_.close()))
+      tryAndLogFailure(maybeJsonRpcWebsocketServer)(opt => opt.map(_.close()))
     }
 
     tryAndLogFailure(metrics)(_.close())
