@@ -5,7 +5,7 @@ import java.nio.ByteOrder
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.{Flow, Framing, Keep, Sink, Source, Tcp}
-import akka.stream.{ActorMaterializer, OverflowStrategy}
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings, OverflowStrategy}
 import akka.util.ByteString
 import com.google.protobuf.{ByteString => GByteString}
 import com.typesafe.config.ConfigFactory
@@ -17,12 +17,17 @@ import io.iohk.ethereum.vm.BlockchainConfigForEvm
 import io.iohk.ethereum.vm.ProgramResult
 
 import scala.annotation.tailrec
+import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Success, Try}
 
 object VmServerApp extends Logger {
 
   implicit val system = ActorSystem("EVM_System")
-  implicit val materializer = ActorMaterializer()
+  val dispatcherIdPath: String = ExtVMInterface.ExtVMDispatcherId.configPath
+
+  implicit val extVmExecutionContext: ExecutionContextExecutor = system.dispatchers.lookup(dispatcherIdPath)
+  val materializerSettings = ActorMaterializerSettings(system).withDispatcher(dispatcherIdPath)
+  implicit val materializer = ActorMaterializer(materializerSettings)
 
   def main(args: Array[String]): Unit = {
     val config = ConfigFactory.load()
