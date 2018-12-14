@@ -1,10 +1,13 @@
 package io.iohk.ethereum.consensus
 package atomixraft
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.google.common.util.concurrent.AtomicDouble
+import io.iohk.ethereum.async._
 import io.iohk.ethereum.blockchain.sync.RegularSync
 import io.iohk.ethereum.consensus.atomixraft.AtomixRaftForger._
 import io.iohk.ethereum.consensus.atomixraft.blocks.AtomixRaftBlockGenerator
@@ -16,7 +19,6 @@ import io.iohk.ethereum.transactions.TransactionPool
 import io.iohk.ethereum.transactions.TransactionPool.PendingTransactionsResponse
 import io.iohk.ethereum.utils.events._
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -29,11 +31,12 @@ class AtomixRaftForger(
   getTransactionFromPoolTimeout: FiniteDuration
 ) extends Actor with ActorLogging with EventSupport {
 
+  // See [[io.iohk.ethereum.consensus.atomixraft.AtomixRaftForger.AtomixRaftForgerDispatcherId]]
+  import context.dispatcher
+
   private[this] val lastForgedBlockNumber = new AtomicDouble(-1.0)
 
   private[this] val metrics = new AtomixRaftForgerMetrics(Metrics.get(), () ⇒ lastForgedBlockNumber.get())
-
-  protected def mainService: String = "raft"
 
   override protected def postProcessEvent(event: EventDSL): EventDSL = event.tag("forger")
 
@@ -73,9 +76,12 @@ class AtomixRaftForger(
     if(isLeader) {
       val parentBlock = blockchain.getBestBlock()
 
+      val time0 = System.nanoTime()
       getBlock(parentBlock) onComplete {
         case Success(PendingBlock(block, _)) ⇒
-          syncTheBlock(block)
+          val dtNanos = System.nanoTime() - time0
+          val dtMillis = TimeUnit.NANOSECONDS.toMillis(dtNanos)
+          syncTheBlock(block, dtMillis)
 
         case Failure(ex) ⇒
           log.error(ex, "Unable to get block")
@@ -87,12 +93,13 @@ class AtomixRaftForger(
     }
   }
 
-  private def syncTheBlock(block: Block): Unit = {
+  private def syncTheBlock(block: Block, dtMillis: Long): Unit = {
     if(isLeader) {
       log.info(s"***** Forged block ${block.idTag}")
 
       Event.ok("block forged")
         .metric(block.header.number.longValue)
+        .attribute(EventAttr.TimeTakenMs, dtMillis)
         .block(block)
         .tag(EventTag.BlockForge)
         .send()
@@ -152,6 +159,11 @@ object AtomixRaftForger {
   case object StartForging extends Msg
   case object StopForging extends Msg
 
+  /**
+   * @see [[io.iohk.ethereum.consensus.ethash.EthashMiner.BlockForgerDispatcherId]]
+   */
+  final val BlockForgerDispatcherId = DispatcherId("mantis.async.dispatchers.block-forger")
+
   private def props(
     blockchain: Blockchain,
     txPool: ActorRef,
@@ -164,7 +176,7 @@ object AtomixRaftForger {
         blockchain, txPool, syncController, consensus,
         getTransactionFromPoolTimeout
       )
-    )
+    ).withDispatcher(BlockForgerDispatcherId)
 
   private[atomixraft] def apply(node: Node): ActorRef = {
     node.consensus match {

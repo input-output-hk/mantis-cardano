@@ -28,8 +28,6 @@ class KnownNodesManager(
 
   scheduler.schedule(config.persistInterval, config.persistInterval, self, PersistChanges)
 
-  protected def mainService: String = "known nodes manager"
-
   override def receive: Receive = {
     case AddKnownNode(uri) =>
       if (!knownNodes.contains(uri)) {

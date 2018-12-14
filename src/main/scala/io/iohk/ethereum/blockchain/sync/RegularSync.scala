@@ -2,6 +2,7 @@ package io.iohk.ethereum.blockchain.sync
 
 import akka.actor._
 import akka.util.ByteString
+import io.iohk.ethereum.async.DispatcherId
 import io.iohk.ethereum.blockchain.sync.PeerRequestHandler.ResponseReceived
 import io.iohk.ethereum.crypto._
 import io.iohk.ethereum.db.storage.AppStateStorage
@@ -45,8 +46,6 @@ class RegularSync(
   import RegularSync._
   import syncConfig._
 
-  protected def mainService: String = "regular sync"
-
   private var headersQueue: Seq[BlockHeader] = Nil
   private var waitingForActor: Option[ActorRef] = None
   var resolvingBranches: Boolean = false
@@ -63,6 +62,10 @@ class RegularSync(
   scheduler.schedule(reportStatusInterval, reportStatusInterval, self, PrintStatus)
 
   peerEventBus ! Subscribe(MessageClassifier(Set(NewBlock.code, NewBlockHashes.code), PeerSelector.AllPeers))
+
+  Event.ok(EventAttr.Dispatcher)
+    .attribute(EventAttr.Dispatcher, context.dispatcher.toString)
+    .send()
 
   def handleCommonMessages: Receive = handlePeerListMessages orElse handleBlacklistMessages
 
@@ -94,6 +97,11 @@ class RegularSync(
       val handshakedPeerCount = handshakedPeers.size
       val blacklistedPeerCount = blacklistedPeers.size
       log.info(s"Best Block: ${number} (= 0x${numberHex}). Handshaked Peers: ${handshakedPeerCount}. Blacklisted: ${blacklistedPeerCount}")
+
+      Event.ok()
+        .attribute(EventAttr.PeerCount, handshakedPeerCount)
+        .attribute(EventAttr.BlacklistPeerCount, blacklistedPeerCount)
+        .send()
   }
 
   def handleAdditionalMessages: Receive = handleNewBlockMessages orElse handleMinedBlock orElse handleNewBlockHashesMessages
@@ -674,6 +682,8 @@ class RegularSync(
 }
 
 object RegularSync {
+  final val RegularSyncDispatcherId = DispatcherId("mantis.async.dispatchers.regular-sync")
+
   // scalastyle:off parameter.number
   def props(appStateStorage: AppStateStorage, etcPeerManager: ActorRef, peerEventBus: ActorRef, ommersPool: ActorRef,
       txPool: ActorRef, broadcaster: BlockBroadcast, ledger: Ledger, blockchain: Blockchain,

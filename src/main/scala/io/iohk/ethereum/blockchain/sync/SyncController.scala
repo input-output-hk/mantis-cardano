@@ -75,9 +75,15 @@ class SyncController(
   }
 
   def startRegularSync(): Unit = {
-    val regularSync = context.actorOf(RegularSync.props(appStateStorage, etcPeerManager,
+    val props: Props = RegularSync.props(appStateStorage, etcPeerManager,
       peerEventBus, ommersPool, txPool, new BlockBroadcast(etcPeerManager, syncConfig),
-      ledger, blockchain, syncConfig, scheduler), "regular-sync")
+      ledger, blockchain, syncConfig, scheduler
+    ) // We set the dispatcher here and not in `RegularSync.props` because we do not want to break the tests
+      // (try it with akka-testkit_2.12-2.4.17)
+      .withDispatcher(RegularSync.RegularSyncDispatcherId)
+
+    val regularSync = context.actorOf(props, "regular-sync")
+
     regularSync ! RegularSync.Start
     context become runningRegularSync(regularSync)
   }

@@ -5,6 +5,7 @@ import java.io.{File, FileInputStream, FileOutputStream}
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.util.{ByteString, Timeout}
+import io.iohk.ethereum.async._
 import io.iohk.ethereum.blockchain.sync.RegularSync
 import io.iohk.ethereum.consensus.blocks.PendingBlock
 import io.iohk.ethereum.consensus.ethash.EthashUtils.ProofOfWork
@@ -21,7 +22,6 @@ import io.iohk.ethereum.utils.BigIntExtensionMethods._
 import io.iohk.ethereum.utils.ByteUtils
 import org.spongycastle.util.encoders.Hex
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
@@ -38,6 +38,9 @@ class EthashMiner(
 
   import EthashMiner._
   import akka.pattern.ask
+
+  // See [[io.iohk.ethereum.consensus.ethash.EthashMiner.BlockForgerDispatcherId]]
+  import context.dispatcher
 
   var currentEpoch: Option[Long] = None
   var currentEpochDagSize: Option[Long] = None
@@ -209,6 +212,11 @@ class EthashMiner(
 }
 
 object EthashMiner {
+  /**
+   * @see [[io.iohk.ethereum.consensus.atomixraft.AtomixRaftForger.BlockForgerDispatcherId]]
+   */
+  final val BlockForgerDispatcherId = DispatcherId("mantis.async.dispatchers.block-forger")
+
   private[ethash] def props(
     blockchain: Blockchain,
     ommersPool: ActorRef,
@@ -223,7 +231,7 @@ object EthashMiner {
         blockchain, ommersPool, txPool, syncController, ethService, consensus,
         getTransactionFromPoolTimeout
       )
-    )
+    ).withDispatcher(BlockForgerDispatcherId)
 
   def apply(node: Node): ActorRef = {
     node.consensus match {

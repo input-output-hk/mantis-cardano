@@ -46,8 +46,6 @@ class PeerManagerActor(
       case _ => Stop
     }
 
-  protected def mainService: String = "peer manager"
-
   override def receive: Receive = {
 
     case StartConnecting =>
@@ -152,6 +150,11 @@ class PeerManagerActor(
       maybePeerId.foreach { peerId =>
         peerEventBus ! Publish(PeerDisconnected(peerId))
         managerState.removeTerminatedPeer(peerId)
+
+        Event.ok("peer disconnected")
+          .attribute(EventAttr.PeerId, peerId.toString)
+          .attribute(EventAttr.ActorRef, ref.toString())
+          .send()
       }
 
     case IncomingConnectionHandshakeSuccess(peerId, peer) =>

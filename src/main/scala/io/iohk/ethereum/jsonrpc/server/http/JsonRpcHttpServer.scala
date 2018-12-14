@@ -13,6 +13,7 @@ import ch.megard.akka.http.cors.javadsl.CorsRejection
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import ch.megard.akka.http.cors.scaladsl.settings.CorsSettings
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import io.iohk.ethereum.async.DispatcherId
 import io.iohk.ethereum.buildinfo.MantisBuildInfo
 import io.iohk.ethereum.jsonrpc._
 import io.iohk.ethereum.metrics.Metrics
@@ -21,9 +22,8 @@ import io.iohk.ethereum.utils.{ConfigUtils, JsonUtils, Logger}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.{DefaultFormats, native}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
 trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
@@ -33,10 +33,10 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
 
   implicit val formats = DefaultFormats
 
-  protected def mainService: String = "jsonrpc http"
-
   def corsAllowedOrigins: HttpOriginRange
   def maxContentLength: Long
+
+  implicit val routeExecutionContext: ExecutionContextExecutor
 
   val corsSettings = CorsSettings.defaultSettings.copy(
     allowGenericHttpRequests = true,
@@ -79,11 +79,11 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
       }
   }
 
-  val stricEntityDuration = FiniteDuration(2 * 150, TimeUnit.MILLISECONDS)
+  val strictEntityTimeout = FiniteDuration(2 * 150, TimeUnit.MILLISECONDS)
 
   val limitsRoute: Route =
     withSizeLimit(maxContentLength) {
-      toStrictEntity(stricEntityDuration) {
+      toStrictEntity(strictEntityTimeout) {
         extractRequestEntity {
           case HttpEntity.Strict(_, data) ⇒
             metrics.RequestSizeDistribution.record(data.size)
@@ -125,9 +125,9 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
 
   private[this] final val buildInfoRoute: StandardRoute = complete(buildInfoResponse)
 
-  private[this] def handleBuildInfo() = buildInfoRoute
+  private[this] def handleBuildInfo(): StandardRoute = buildInfoRoute
 
-  private[this] def handleHealthcheck() = {
+  private[this] def handleHealthcheck(): StandardRoute = {
     val responseF = jsonRpcController.healthcheck()
 
     val httpResponseF =
@@ -179,19 +179,18 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
   private def updateEventWithRequest(event: EventDSL, request: JsonRpcRequest): EventDSL = {
     val requestJson = serialization.write(request)
     event
-      .attribute("requestMethod", request.method)
-      .attribute("requestObj", request.toString)
-      .attribute("requestJson", requestJson)
+      .attribute(EventAttr.RequestMethod, request.method)
+      .attribute(EventAttr.RequestObj, request.toString)
+      .attribute(EventAttr.RequestJson, requestJson)
   }
 
   private def updateEventWithResponse(event: EventDSL, response: JsonRpcResponse): EventDSL = {
     val responseJson = serialization.write(response)
     event
-      .attribute("responseObj", response.toString)
-      .attribute("responseJson", responseJson)
+      .attribute(EventAttr.ResponseObj, response.toString)
+      .attribute(EventAttr.ResponseJson, responseJson)
   }
 
-  // scalastyle:off method.length
   private def handleRequestInternal(
     uuid: UUID,
     isBatch: Boolean,
@@ -240,7 +239,7 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
     }
   }
 
-  private def handleBatchRequest(requests: Seq[JsonRpcRequest]) = extractClientIP { ip =>
+  private def handleBatchRequest(requests: Seq[JsonRpcRequest]): Route = extractClientIP { ip =>
     complete {
       val requestId = requests.map(_.id.flatMap(_.extractOpt[String]).getOrElse("n/a")).mkString(",")
 
@@ -278,6 +277,7 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
 }
 
 object JsonRpcHttpServer extends Logger {
+  final val JsonRpcHttpDispatcherId = DispatcherId("mantis.async.dispatchers.json-rpc-http")
 
   def apply(jsonRpcController: JsonRpcController, config: JsonRpcHttpServerConfig, secureRandom: SecureRandom)
            (implicit actorSystem: ActorSystem): Either[String, JsonRpcHttpServer] = config.mode match {

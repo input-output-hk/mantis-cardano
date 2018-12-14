@@ -16,8 +16,6 @@ case class EtcForkBlockExchangeState(
 
   import handshakerConfiguration._
 
-  protected def mainService: String = "fork block state"
-
   def nextMessage: NextMessage =
     NextMessage(
       messageToSend = GetBlockHeaders(Left(forkResolver.forkBlockNumber), maxHeaders = 1, skip = 0, reverse = false),

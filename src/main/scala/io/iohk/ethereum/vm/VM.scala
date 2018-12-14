@@ -1,12 +1,17 @@
 package io.iohk.ethereum.vm
 
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+
 import akka.util.ByteString
 import io.iohk.ethereum.domain.Address
 import io.iohk.ethereum.utils.Logger
+import io.iohk.ethereum.utils.events._
 
 import scala.annotation.tailrec
+import scala.util.{Failure, Success, Try}
 
-class VM[W <: WorldStateProxy[W, S], S <: Storage[S]] extends Logger {
+class VM[W <: WorldStateProxy[W, S], S <: Storage[S]] extends Logger with VMEventSupport[W, S] {
 
   type PC = ProgramContext[W, S]
   type PR = ProgramResult[W, S]
@@ -24,12 +29,40 @@ class VM[W <: WorldStateProxy[W, S], S <: Storage[S]] extends Logger {
       log.trace(s"caller:  $callerAddr | recipient: $recipientAddr | gasPrice: $gasPrice | value: $value | inputData: ${Hex.toHexString(inputData.toArray)}")
     }
 
-    context.recipientAddr match {
-      case Some(recipientAddr) =>
-        call(context, recipientAddr)
+    def innerRun(): PR = {
+      context.recipientAddr match {
+        case Some(recipientAddr) =>
+          call(context, recipientAddr)
 
-      case None =>
-        create(context)._1
+        case None =>
+          create(context)._1
+      }
+    }
+
+    val startTime = System.nanoTime()
+
+    // FIXME Do some real call tracing end-to-end
+    val uuid = UUID.randomUUID()
+    Event.okStartWith(uuid, context).send()
+
+    Try(innerRun()) match {
+      case Success(res) =>
+        val timeTakenMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime)
+
+        res.error match {
+          case Some(error) =>
+            Event.errorFinishWith(uuid, timeTakenMs, context, res, error).send()
+          case None =>
+            Event.okFinishWith(uuid, timeTakenMs, context, res).send()
+        }
+
+        res
+
+      case Failure(ex) =>
+        val timeTakenMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime)
+        Event.exceptionFinishWith(uuid, timeTakenMs, context, ex).send()
+
+        throw ex
     }
   }
 
@@ -130,4 +163,49 @@ class VM[W <: WorldStateProxy[W, S], S <: Storage[S]] extends Logger {
         world = result.world.saveCode(address, result.returnData))
     }
   }
+}
+
+trait VMEventSupport[W <: WorldStateProxy[W, S], S <: Storage[S]] extends EventSupport { self: VM[W, S] ⇒
+  private def updateWithContext(event: EventDSL, uuid: UUID, context: PC): EventDSL = {
+    val event1 = event
+      .attribute(EventAttr.Uuid, uuid.toString)
+      .attribute("caller", context.callerAddr.toString)
+      .attribute("origin", context.originAddr.toString)
+      .attribute("recipient", context.recipientAddr.map(_.toString).getOrElse(""))
+      .attribute("startGas", context.startGas.toString)
+      .attribute("gasPrice", context.gasPrice.toString)
+      .attribute("value", context.value.toString)
+      .hexByteString("inputData", context.inputData)
+
+    // FIXME Apparently, `context.blockHeader` can be null in `PrecompiledContractsSpec` ...
+    if(context.blockHeader eq null) event1 else event1.header(context.blockHeader)
+  }
+
+  private def updateWithResult(event: EventDSL, res: PR): EventDSL =
+    event
+      .attribute("gasRemaining", res.gasRemaining)
+      .attribute("gasRefund", res.gasRefund)
+      .attribute("txLogs", res.logs.mkString("[", ", ", "]"))
+      .hexByteString("returnData", res.returnData)
+
+  def okStartWith(uuid: UUID, context: PC): EventDSL =
+    Event.okStart().updateWith(updateWithContext(_, uuid, context))
+
+  def errorFinishWith(uuid: UUID, timeTakenMs: Long, context: PC, res: PR, error: ProgramError): EventDSL =
+    Event.errorFinish()
+      .updateWith(updateWithContext(_, uuid, context))
+      .updateWith(updateWithResult(_, res))
+      .timeTakenMs(timeTakenMs)
+      .programError(error)
+
+  def okFinishWith(uuid: UUID, timeTakenMs: Long, context: PC, res: PR): EventDSL =
+    Event.errorFinish()
+      .updateWith(updateWithContext(_, uuid, context))
+      .updateWith(updateWithResult(_, res))
+      .timeTakenMs(timeTakenMs)
+
+  def exceptionFinishWith(uuid: UUID, timeTakenMs: Long, context: PC, ex: Throwable): EventDSL =
+    Event.exceptionFinish(ex)
+      .updateWith(updateWithContext(_, uuid, context))
+      .timeTakenMs(timeTakenMs)
 }

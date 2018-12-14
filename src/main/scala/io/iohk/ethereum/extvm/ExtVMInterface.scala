@@ -3,19 +3,26 @@ package io.iohk.ethereum.extvm
 import java.nio.ByteOrder
 
 import akka.actor.ActorSystem
-import akka.stream.{ActorMaterializer, OverflowStrategy}
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings, OverflowStrategy}
 import akka.stream.scaladsl.{Framing, Keep, Sink, SinkQueueWithCancel, Source, SourceQueueWithComplete, Tcp}
 import akka.util.ByteString
 import atmos.dsl._
 import Slf4jSupport._
+import io.iohk.ethereum.async.DispatcherId
 import io.iohk.ethereum.ledger.{InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage}
-import io.iohk.ethereum.utils.{BlockchainConfig, Logger, VmConfig}
+import io.iohk.ethereum.utils.{BlockchainConfig, VmConfig}
 import io.iohk.ethereum.vm._
 
-class ExtVMInterface(externaVmConfig: VmConfig.ExternalConfig, blockchainConfig: BlockchainConfig, testMode: Boolean)(implicit system: ActorSystem)
-  extends VM[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage] with Logger {
+import scala.concurrent.ExecutionContextExecutor
 
-  private implicit val materializer = ActorMaterializer()
+class ExtVMInterface(externaVmConfig: VmConfig.ExternalConfig, blockchainConfig: BlockchainConfig, testMode: Boolean)(implicit system: ActorSystem)
+  extends VM[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage] with VMEventSupport[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage] {
+
+  val dispatcherIdPath: String = ExtVMInterface.ExtVMDispatcherId.configPath
+  implicit val extVmExecutionContext: ExecutionContextExecutor = system.dispatchers.lookup(dispatcherIdPath)
+
+  val materializerSettings = ActorMaterializerSettings(system).withDispatcher(dispatcherIdPath)
+  implicit val materializer = ActorMaterializer(materializerSettings)
 
   private implicit val retryPolicy = retryFor(externaVmConfig.retry.times.attempts)
     .using(linearBackoff(externaVmConfig.retry.delay))
@@ -69,5 +76,8 @@ class ExtVMInterface(externaVmConfig: VmConfig.ExternalConfig, blockchainConfig:
     vmClient.foreach(_.close())
     vmClient = None
   }
+}
 
+object ExtVMInterface {
+  final val ExtVMDispatcherId = DispatcherId("mantis.async.dispatchers.extvm")
 }

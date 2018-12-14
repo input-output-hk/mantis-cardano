@@ -19,8 +19,7 @@ import io.iohk.ethereum.jsonrpc.server.ipc.JsonRpcIpcServer.JsonRpcIpcServerConf
 import io.iohk.ethereum.metrics.Metrics
 import io.iohk.ethereum.utils.events._
 
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.FiniteDuration
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success}
@@ -90,7 +89,20 @@ class JsonRpcController(
   ethService: EthService,
   personalService: PersonalService,
   testServiceOpt: Option[TestService],
-  config: JsonRpcConfig) extends Logger with EventSupport {
+  config: JsonRpcConfig,
+  ec: ExecutionContext = scala.concurrent.ExecutionContext.global
+) extends Logger with EventSupport {
+
+  def withExecutionContext(ec: ExecutionContext): JsonRpcController =
+    new JsonRpcController(
+      web3Service = web3Service,
+      netService = netService,
+      ethService = ethService,
+      personalService = personalService,
+      testServiceOpt = testServiceOpt,
+      config = config,
+      ec = ec
+    )
 
   import JsonRpcController._
   import EthJsonMethodsImplicits._
@@ -99,9 +111,9 @@ class JsonRpcController(
   import JsonMethodsImplicits._
   import JsonRpcErrors._
 
-  private[this] val metrics = new JsonRpcControllerMetrics(Metrics.get())
+  implicit def executionContext: ExecutionContext = ec
 
-  protected def mainService: String = "jsonrpc"
+  private[this] val metrics = new JsonRpcControllerMetrics(Metrics.get())
 
   lazy val apisHandleFns: Map[String, PartialFunction[JsonRpcRequest, Future[JsonRpcResponse]]] = Map(
     Apis.Eth -> handleEthRequest,

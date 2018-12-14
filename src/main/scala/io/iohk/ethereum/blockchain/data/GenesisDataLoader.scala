@@ -35,8 +35,6 @@ class GenesisDataLoader(
   private val emptyTrieRootHash = ByteString(crypto.kec256(rlp.encode(Array.emptyByteArray)))
   private val emptyEvmHash: ByteString = crypto.kec256(ByteString.empty)
 
-  protected def mainService: String = "genesis load"
-
   def loadGenesisData(): Unit = {
     Event.okStart().send()
 

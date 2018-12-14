@@ -2,27 +2,34 @@ package io.iohk.ethereum.jsonrpc.server.http
 
 import java.io.{File, FileInputStream}
 import java.security.{KeyStore, SecureRandom}
-import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 
+import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.HttpOriginRange
 import akka.http.scaladsl.{ConnectionContext, Http}
-import akka.stream.ActorMaterializer
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import io.iohk.ethereum.jsonrpc.JsonRpcController
 import io.iohk.ethereum.jsonrpc.server.http.JsonRpcHttpServer.JsonRpcHttpServerConfig
 import io.iohk.ethereum.jsonrpc.server.http.JsonRpcHttpsServer.HttpsSetupResult
 import io.iohk.ethereum.utils.Logger
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContextExecutor
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
-class JsonRpcHttpsServer(val jsonRpcController: JsonRpcController, config: JsonRpcHttpServerConfig,
+class JsonRpcHttpsServer(_jsonRpcController: JsonRpcController, config: JsonRpcHttpServerConfig,
                          secureRandom: SecureRandom)(implicit val actorSystem: ActorSystem)
   extends JsonRpcHttpServer with Logger {
 
+  val dispatcherIdPath: String = JsonRpcHttpServer.JsonRpcHttpDispatcherId.configPath
+
+  implicit val routeExecutionContext: ExecutionContextExecutor = actorSystem.dispatchers.lookup(dispatcherIdPath)
+
+  val jsonRpcController: JsonRpcController = _jsonRpcController.withExecutionContext(routeExecutionContext)
+
   def run(): Unit = {
-    implicit val materializer = ActorMaterializer()
+    val materializerSettings = ActorMaterializerSettings(actorSystem).withDispatcher(dispatcherIdPath)
+    implicit val materializer = ActorMaterializer(materializerSettings)
 
     val maybeSslContext = validateCertificateFiles(config.certificateKeyStorePath, config.certificateKeyStoreType, config.certificatePasswordFile).flatMap{
       case (keystorePath, keystoreType, passwordFile) =>

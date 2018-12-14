@@ -22,7 +22,7 @@ class RiemannRegistry(
 
   protected def getBaseTimeUnit: TimeUnit = TimeUnit.MILLISECONDS
 
-  def mainService: String = getClass.getSimpleName
+  override def mainService: String = super.mainService
 
   private def newEvent(buffer: EventsDSL, m: Meter, suffix: String): EventsDSL = {
     require(!suffix.startsWith("."), "suffix does not start with '.'")

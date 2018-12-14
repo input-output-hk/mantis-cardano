@@ -15,8 +15,6 @@ case class EtcHelloExchangeState(handshakerConfiguration: EtcHandshakerConfigura
 
   import handshakerConfiguration._
 
-  protected def mainService: String = "hello state"
-
   override def nextMessage: NextMessage = {
     Event.ok("peer send hello")
       .description("RLPx connection established, sending Hello")

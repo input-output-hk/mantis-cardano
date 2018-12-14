@@ -11,7 +11,7 @@ import org.json4s.JsonAST.{JInt, JString}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class JsonRpcHttpServerSpec extends FlatSpec with Matchers with ScalatestRouteTest {
 
@@ -129,6 +129,8 @@ class JsonRpcHttpServerSpec extends FlatSpec with Matchers with ScalatestRouteTe
       override def corsAllowedOrigins = config.corsAllowedOrigins
 
       def maxContentLength: Long = config.maxContentLength
+
+      implicit val routeExecutionContext: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
     }
 
     val corsAllowedOrigin = HttpOrigin("http://localhost:3333")
@@ -140,6 +142,8 @@ class JsonRpcHttpServerSpec extends FlatSpec with Matchers with ScalatestRouteTe
 
       override def corsAllowedOrigins = HttpOriginRange(corsAllowedOrigin)
       def maxContentLength: Long = config.maxContentLength
+
+      implicit val routeExecutionContext: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
     }
   }
 

@@ -5,6 +5,7 @@ import io.iohk.ethereum.vm.{WorldStateProxy, _}
 import Implicits._
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.utils.events.EventSupport
 import io.iohk.ethereum.utils.{BlockchainConfig, Logger, VmConfig}
 
 import scala.annotation.tailrec
@@ -17,7 +18,7 @@ class VMClient(
     externalVmConfig: VmConfig.ExternalConfig,
     messageHandler: MessageHandler,
     testMode: Boolean)
-  extends Logger {
+  extends Logger with EventSupport {
 
   def sendHello(version: String, blockchainConfig: BlockchainConfig): Unit = {
     val config = BlockchainConfigForEvm(blockchainConfig)
