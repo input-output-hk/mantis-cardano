@@ -49,7 +49,7 @@ trait EventSupport {
 
   protected def error(moreService: String): EventDSL = {
     val service = mkService(moreService)
-    val event = Riemann.warning(service)
+    val event = Riemann.error(service)
     postProcessInternal(event)
   }
 

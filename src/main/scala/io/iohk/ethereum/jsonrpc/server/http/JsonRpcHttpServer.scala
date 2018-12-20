@@ -20,8 +20,8 @@ import io.iohk.ethereum.jsonrpc.server.SslSetup.CertificateConfig
 import io.iohk.ethereum.metrics.Metrics
 import io.iohk.ethereum.utils.events._
 import io.iohk.ethereum.utils.{ConfigUtils, JsonUtils, Logger}
+import io.iohk.ethereum.utils.JsonUtils.{Formats, Serialization}
 import org.json4s.JsonAST.{JInt, JString}
-import org.json4s.{DefaultFormats, native}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -29,10 +29,6 @@ import scala.util.{Failure, Success, Try}
 
 trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
   val jsonRpcController: JsonRpcController
-
-  implicit val serialization = native.Serialization
-
-  implicit val formats = DefaultFormats
 
   def corsAllowedOrigins: HttpOriginRange
   def maxContentLength: Long
@@ -136,13 +132,13 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
         case response if response.isOK ⇒
           HttpResponse(
             status = StatusCodes.OK,
-            entity = HttpEntity(ContentTypes.`application/json`, serialization.writePretty(response))
+            entity = HttpEntity(ContentTypes.`application/json`, JsonUtils.pretty(response))
           )
 
         case response ⇒
           HttpResponse(
             status = StatusCodes.InternalServerError,
-            entity = HttpEntity(ContentTypes.`application/json`, serialization.writePretty(response))
+            entity = HttpEntity(ContentTypes.`application/json`, JsonUtils.pretty(response))
           )
       }
 
@@ -178,7 +174,7 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
   }
 
   private def updateEventWithRequest(event: EventDSL, request: JsonRpcRequest): EventDSL = {
-    val requestJson = serialization.write(request)
+    val requestJson = JsonUtils.pretty(request)
     event
       .attribute(EventAttr.RequestMethod, request.method)
       .attribute(EventAttr.RequestObj, request.toString)
@@ -186,7 +182,7 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
   }
 
   private def updateEventWithResponse(event: EventDSL, response: JsonRpcResponse): EventDSL = {
-    val responseJson = serialization.write(response)
+    val responseJson = JsonUtils.pretty(response)
     event
       .attribute(EventAttr.ResponseObj, response.toString)
       .attribute(EventAttr.ResponseJson, responseJson)
@@ -204,7 +200,7 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
     val requestIdOpt = request.id.flatMap(_.extractOpt[String])
     val requestId = requestIdOpt.getOrElse("")
     val requestUUid = uuid.toString
-    val requestJson = serialization.write(request)
+    val requestJson = JsonUtils.pretty(request)
 
     val metaUpdater = updateEventWithMeta(_: EventDSL, uuid, isBatch, batchIndex, batchSize, ip, requestId)
     val requestUpdater = updateEventWithRequest(_: EventDSL, request)
@@ -218,7 +214,6 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
 
     responseF.andThen {
       case Success(response) =>
-        val responseJson = serialization.write(response)
         Event.okFinish()
           .updateWith(metaUpdater)
           .updateWith(updateEventWithResponse(_, response))

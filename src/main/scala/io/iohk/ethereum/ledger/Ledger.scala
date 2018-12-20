@@ -4,6 +4,7 @@ import akka.util.ByteString
 import io.iohk.ethereum.consensus.Consensus
 import io.iohk.ethereum.consensus.validators.BlockHeaderError.HeaderParentNotFoundError
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.eventbus.EventBus
 import io.iohk.ethereum.ledger.BlockExecutionError.ValidationBeforeExecError
 import io.iohk.ethereum.ledger.BlockQueue.Leaf
 import io.iohk.ethereum.ledger.Ledger._
@@ -150,6 +151,8 @@ class LedgerImpl(
       (tds.head + b.header.difficulty) :: tds
     }.reverse.tail
 
+    val whenImportedMillis = System.currentTimeMillis()
+
     val result = maybeError match {
       case None =>
         BlockImportedToTop(importedBlocks, totalDifficulties)
@@ -166,6 +169,10 @@ class LedgerImpl(
     }
 
     importedBlocks.foreach { b =>
+      metrics.ImportedBlocksCounter.increment()
+      val txCount = b.body.transactionList.length
+      metrics.ImportedTransactionsCounter.increment(txCount.toDouble)
+
       log.info(s"Imported new block ${b.idTag} to the top of chain")
       Event.ok("block imported")
         .metric(b.header.number.longValue)
@@ -175,17 +182,7 @@ class LedgerImpl(
     }
 
     if(importedBlocks.nonEmpty) {
-      val blocksCount = importedBlocks.size
-      metrics.ImportedBlocksCounter.increment(blocksCount.toDouble)
-      Event.ok("blocks imported")
-        .metric(blocksCount.toDouble)
-        .send()
-
-      val transactionsCount = importedBlocks.map(_.body.transactionList.length).sum
-      metrics.ImportedTransactionsCounter.increment(transactionsCount.toDouble)
-      Event.ok("transactions imported")
-        .metric(transactionsCount)
-        .send()
+      EventBus.get[LedgerBusEvent]().post(LedgerBusEvent.ImportedBlocks(whenImportedMillis))
     }
 
     result
