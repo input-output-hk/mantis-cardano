@@ -5,6 +5,7 @@ import java.time.Clock
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.agent.Agent
+import akka.stream.ActorMaterializer
 import io.iohk.ethereum.blockchain.data.GenesisDataLoader
 import io.iohk.ethereum.blockchain.sync.{BlockchainHostActor, SyncController}
 import io.iohk.ethereum.consensus._
@@ -18,6 +19,7 @@ import io.iohk.ethereum.jsonrpc.NetService.NetServiceConfig
 import io.iohk.ethereum.jsonrpc._
 import io.iohk.ethereum.jsonrpc.server.http.JsonRpcHttpServer
 import io.iohk.ethereum.jsonrpc.server.ipc.JsonRpcIpcServer
+import io.iohk.ethereum.jsonrpc.server.websocket.JsonRpcWebsocketServer
 import io.iohk.ethereum.keystore.{KeyStore, KeyStoreImpl}
 import io.iohk.ethereum.ledger.Ledger.VMImpl
 import io.iohk.ethereum.ledger._
@@ -58,7 +60,8 @@ trait FilterConfigBuilder {
   lazy val filterConfig = FilterConfig(Config.config)
 }
 
-trait NodeKeyBuilder {
+trait
+NodeKeyBuilder {
   self: SecureRandomBuilder =>
   lazy val nodeKey = loadAsymmetricCipherKeyPair(Config.nodeKeyFile, secureRandom)
 }
@@ -364,9 +367,19 @@ trait JSONRpcControllerBuilder {
 }
 
 trait JSONRpcHttpServerBuilder {
-  self: ActorSystemBuilder with BlockchainBuilder with JSONRpcControllerBuilder with SecureRandomBuilder with JSONRpcConfigBuilder =>
+  self: ActorSystemBuilder with JSONRpcControllerBuilder with SecureRandomBuilder with JSONRpcConfigBuilder =>
 
   lazy val maybeJsonRpcHttpServer = JsonRpcHttpServer(jsonRpcController, jsonRpcConfig.httpServerConfig, secureRandom)
+}
+
+trait JSONRpcWebsocketServerBuilder {
+  self: ActorSystemBuilder with JSONRpcControllerBuilder with JSONRpcConfigBuilder with BlockchainBuilder
+    with SecureRandomBuilder with StorageBuilder =>
+
+  implicit val materializer = ActorMaterializer()
+
+  lazy val maybeJsonRpcWebsocketServer = JsonRpcWebsocketServer(jsonRpcController, blockchain,
+    storagesInstance.storages.appStateStorage, jsonRpcConfig.websocketServerConfig, secureRandom)
 }
 
 trait JSONRpcIpcServerBuilder {
@@ -509,6 +522,7 @@ trait Node extends NodeKeyBuilder
   with JSONRpcControllerBuilder
   with JSONRpcHttpServerBuilder
   with JSONRpcIpcServerBuilder
+  with JSONRpcWebsocketServerBuilder
   with ShutdownHookBuilder
   with Logger
   with GenesisDataLoaderBuilder

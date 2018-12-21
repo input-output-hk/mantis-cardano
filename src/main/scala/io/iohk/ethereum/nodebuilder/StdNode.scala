@@ -49,12 +49,21 @@ abstract class BaseNode extends Node with EventSupport {
 
   private[this] def startDiscoveryManager(): Unit = peerDiscoveryManager // unlazy
 
-  private[this] def startJsonRpcHttpServer(): Unit =
+  private[this] def startJsonRpcHttpServer(): Unit = {
     maybeJsonRpcHttpServer match {
       case Right(jsonRpcServer) if jsonRpcConfig.httpServerConfig.enabled => jsonRpcServer.run()
       case Left(error) if jsonRpcConfig.httpServerConfig.enabled => log.error(error)
-      case _=> //Nothing
+      case _ => //Nothing
     }
+  }
+
+  private[this] def startJsonRpcWebsocketServer(): Unit = {
+    maybeJsonRpcWebsocketServer match {
+      case Right(jsonRpcWebsocketServer) if jsonRpcConfig.websocketServerConfig.enabled => jsonRpcWebsocketServer.run()
+      case Left(error) if jsonRpcConfig.websocketServerConfig.enabled => log.error(error)
+      case _ => //Nothing
+    }
+  }
 
   private[this] def startJsonRpcIpcServer(): Unit = {
     if (jsonRpcConfig.ipcServerConfig.enabled) jsonRpcIpcServer.run()
@@ -113,6 +122,7 @@ abstract class BaseNode extends Node with EventSupport {
 
     startJsonRpcHttpServer()
     startJsonRpcIpcServer()
+    startJsonRpcWebsocketServer()
 
     startHealthcheckSender()
   }
@@ -137,6 +147,9 @@ abstract class BaseNode extends Node with EventSupport {
     tryAndLogFailure(jsonRpcController)(_.shutdown())
     if (jsonRpcConfig.ipcServerConfig.enabled) {
       tryAndLogFailure(jsonRpcIpcServer)(_.close())
+    }
+    if (jsonRpcConfig.websocketServerConfig.enabled) {
+      tryAndLogFailure(maybeJsonRpcWebsocketServer)(opt => opt.map(_.close()))
     }
 
     tryAndLogFailure(metrics)(_.close())

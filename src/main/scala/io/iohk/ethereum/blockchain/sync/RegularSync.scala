@@ -7,6 +7,7 @@ import io.iohk.ethereum.blockchain.sync.PeerRequestHandler.ResponseReceived
 import io.iohk.ethereum.crypto._
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.eventbus.event.NewHead
 import io.iohk.ethereum.ledger._
 import io.iohk.ethereum.mpt.MerklePatriciaTrie.MissingNodeException
 import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
@@ -159,6 +160,7 @@ class RegularSync(
             case BlockImportedToTop(newBlocks, newTds) =>
               broadcastBlocks(newBlocks, newTds)
               updateTxAndOmmerPools(newBlocks, Nil)
+              publishEvents(newBlocks, Nil)
 
               Event.ok("block new imported to top")
                 .metric(newBlock.header.number.longValue)
@@ -193,6 +195,7 @@ class RegularSync(
             case ChainReorganised(oldBranch, newBranch, totalDifficulties) =>
               updateTxAndOmmerPools(newBranch, oldBranch)
               broadcastBlocks(newBranch, totalDifficulties)
+              publishEvents(newBranch, oldBranch)
 
               Event.ok("block new chain reorganised")
                 .metric(newBlock.header.number.longValue)
@@ -337,6 +340,7 @@ class RegularSync(
                 .metric(block.header.number.longValue)
                 .send()
 
+              publishEvents(blocks, Nil)
               broadcastBlocks(blocks, totalDifficulties)
               updateTxAndOmmerPools(blocks, Nil)
 
@@ -347,6 +351,7 @@ class RegularSync(
 
               broadcastBlocks(newBranch, totalDifficulties)
               updateTxAndOmmerPools(newBranch, oldBranch)
+              publishEvents(newBranch, oldBranch)
 
             case DuplicateBlock =>
               Event.warning("mined block chain duplicate")
@@ -595,6 +600,7 @@ class RegularSync(
         } else {
           context.self ! ResumeRegularSync
         }
+        publishEvents(importedBlocks, Nil)
     }
   }
 
@@ -679,6 +685,9 @@ class RegularSync(
   private def notDownloading(): Boolean =
     headersQueue.isEmpty && waitingForActor.isEmpty && !resolvingBranches
 
+  private def publishEvents(newBlocks: Seq[Block], removedBlocks: Seq[Block]): Unit = {
+    context.system.eventStream.publish(NewHead(removedBlocks, newBlocks))
+  }
 }
 
 object RegularSync {
