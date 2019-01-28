@@ -2,6 +2,7 @@ package io.iohk.ethereum.utils
 
 import akka.util.ByteString
 import io.iohk.ethereum.domain.{Block, BlockHeader}
+import io.iohk.ethereum.healthcheck.HealthcheckResult
 import io.iohk.ethereum.network.PeerId
 import io.iohk.ethereum.vm.ProgramError
 import org.spongycastle.util.encoders.Hex
@@ -66,6 +67,11 @@ package object events {
 
 
     def block(prefix: String, block: Block): EventDSL = this.block(prefix, block.header)
+
+    def healthcheck(result: HealthcheckResult): EventDSL =
+      result.error.fold(event)(event.attribute(EventAttr.Error, _))
+        .attribute(EventAttr.Status, result.status.toString)
+        .description(result.description)
   }
 
   object EventState {

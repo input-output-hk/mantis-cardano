@@ -14,6 +14,7 @@ import io.iohk.ethereum.db.components.{DataSourcesComponent, SharedLevelDBDataSo
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.db.storage.pruning.PruningMode
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.healthcheck.{HealthcheckService, HealthcheckServiceConfig}
 import io.iohk.ethereum.jsonrpc.JsonRpcController.JsonRpcConfig
 import io.iohk.ethereum.jsonrpc.NetService.NetServiceConfig
 import io.iohk.ethereum.jsonrpc._
@@ -128,7 +129,7 @@ trait NodeStatusBuilder {
       serverStatus = ServerStatus.NotListening,
       discoveryStatus = ServerStatus.NotListening)
 
-  lazy val nodeStatusHolder = Agent(nodeStatus)
+  lazy val nodeStatusHolder = Agent(nodeStatus) // Note Agents are deprecated
 }
 
 trait BlockchainBuilder {
@@ -357,13 +358,15 @@ trait JSONRpcControllerBuilder {
     EthServiceBuilder with
     NetServiceBuilder with
     PersonalServiceBuilder with
-    JSONRpcConfigBuilder =>
+    JSONRpcConfigBuilder with
+    HealthcheckServiceBuilder =>
 
   private val testService =
     if (Config.testmode) Some(this.asInstanceOf[TestServiceBuilder].testService)
     else None
 
-  lazy val jsonRpcController = new JsonRpcController(web3Service, netService, ethService, personalService, testService, jsonRpcConfig)
+  lazy val jsonRpcController = new JsonRpcController(web3Service, netService, ethService, personalService,
+    healthcheckService, testService, jsonRpcConfig)
 }
 
 trait JSONRpcHttpServerBuilder {
@@ -458,6 +461,15 @@ trait SyncControllerBuilder {
 
 }
 
+trait HealthcheckServiceConfigBuilder {
+  lazy val hcsConfig = HealthcheckServiceConfig(Config.config)
+}
+trait HealthcheckServiceBuilder {
+  self: HealthcheckServiceConfigBuilder with NetServiceBuilder with EthServiceBuilder =>
+
+  lazy val healthcheckService = new HealthcheckService(hcsConfig, ethService, netService)
+}
+
 trait ShutdownHookBuilder { self: Logger ⇒
   def shutdown(): Unit = {/* No default behaviour during shutdown. */}
 
@@ -548,3 +560,5 @@ trait Node extends NodeKeyBuilder
   with ConsensusBuilder
   with ConsensusConfigBuilder
   with LedgerBuilder
+  with HealthcheckServiceConfigBuilder
+  with HealthcheckServiceBuilder

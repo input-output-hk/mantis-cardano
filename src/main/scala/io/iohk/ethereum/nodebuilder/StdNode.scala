@@ -3,7 +3,7 @@ package io.iohk.ethereum.nodebuilder
 import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.actor.ActorSystem
-import com.google.common.util.concurrent.ThreadFactoryBuilder
+import io.iohk.ethereum.async.StdThreadFactoryBuilder
 import io.iohk.ethereum.blockchain.sync.SyncController
 import io.iohk.ethereum.buildinfo.MantisBuildInfo
 import io.iohk.ethereum.consensus.StdConsensusBuilder
@@ -82,12 +82,9 @@ abstract class BaseNode extends Node with EventSupport {
     log.info(s"buildInfo = \n$json")
   }
 
+  // FIXME healthchecks are triggered by the load balancer, so we need to take this into account
   private[this] def startHealthcheckSender(): Unit = {
-    val tf = (new ThreadFactoryBuilder)
-      .setDaemon(true)
-      .setNameFormat("healthcheck-sender-%d")
-      .setPriority(Thread.NORM_PRIORITY)
-      .build()
+    val tf = StdThreadFactoryBuilder("healthcheck-sender").build()
 
     val executor = Executors.newScheduledThreadPool(1, tf)
     executor.scheduleAtFixedRate(

@@ -10,9 +10,8 @@ import io.iohk.ethereum.jsonrpc.Web3Service._
 import io.iohk.ethereum.utils.Logger
 import org.json4s.JsonAST.{JArray, JValue}
 import org.json4s.JsonDSL._
-import com.typesafe.config.{Config => TypesafeConfig}
-import io.iohk.ethereum.healthcheck.HealthcheckResponse
-import io.iohk.ethereum.healthcheck.HealthcheckStatus
+import com.typesafe.config.{Config ⇒ TypesafeConfig}
+import io.iohk.ethereum.healthcheck.{HealthcheckResults, HealthcheckService}
 import io.iohk.ethereum.jsonrpc.TestService._
 import io.iohk.ethereum.jsonrpc.server.http.JsonRpcHttpServer.JsonRpcHttpServerConfig
 import io.iohk.ethereum.jsonrpc.server.ipc.JsonRpcIpcServer.JsonRpcIpcServerConfig
@@ -91,6 +90,7 @@ class JsonRpcController(
   netService: NetService,
   ethService: EthService,
   personalService: PersonalService,
+  healthcheckService: HealthcheckService,
   testServiceOpt: Option[TestService],
   config: JsonRpcConfig,
   ec: ExecutionContext = scala.concurrent.ExecutionContext.global
@@ -102,6 +102,7 @@ class JsonRpcController(
       netService = netService,
       ethService = ethService,
       personalService = personalService,
+      healthcheckService = healthcheckService,
       testServiceOpt = testServiceOpt,
       config = config,
       ec = ec
@@ -308,62 +309,9 @@ class JsonRpcController(
       Future.successful(JsonRpcResponse("2.0", Some(result), None, req.id))
   }
 
-  final val listeningHC = JsonRpcHealthcheck("listening", () ⇒ netService.listening(NetService.ListeningRequest()))
-  final val peerCountHC = JsonRpcHealthcheck("peerCount", () ⇒ netService.peerCount(PeerCountRequest()))
-  final val earliestBlockHC = JsonRpcHealthcheck("earliestBlock", () ⇒ ethService.getBlockByNumber(BlockByNumberRequest(EthService.BlockParam.Earliest, true)))
-  final val latestBlockHC = JsonRpcHealthcheck("latestBlock", () ⇒ ethService.getBlockByNumber(BlockByNumberRequest(EthService.BlockParam.Latest, true)))
-  final val pendingBlockHC = JsonRpcHealthcheck("pendingBlock", () ⇒ ethService.getBlockByNumber(BlockByNumberRequest(EthService.BlockParam.Pending, true)))
+  def healthcheck(): Future[HealthcheckResults] = healthcheckService.apply()
 
-  def healthcheck(): Future[HealthcheckResponse] = {
-    val listeningF = listeningHC()
-    val peerCountF = peerCountHC()
-    val earliestBlockF = earliestBlockHC()
-    val latestBlockF = latestBlockHC()
-    val pendingBlockF = pendingBlockHC()
-
-    val allChecksF = List(listeningF, peerCountF, earliestBlockF, latestBlockF, pendingBlockF)
-    val responseF = Future.sequence(allChecksF).map(HealthcheckResponse)
-
-    responseF.andThen {
-      case Success(response) ⇒ {
-        if (response.isOK) {
-          Event.ok("health").send()
-        }
-        else {
-          metrics.HealhcheckErrorCounter.increment()
-
-          Event.error("health").send()
-          response.checks.foreach { result =>
-            (result.status, result.error) match {
-              case (HealthcheckStatus.OK, None) =>
-                Event.ok(s"health ${result.description}").send()
-
-              case (HealthcheckStatus.ERROR, Some(error)) =>
-                Event
-                  .error(s"health ${result.description}")
-                  .attribute(EventAttr.Error, error)
-                  .send()
-              case _ =>
-                // See assertion in [[io.iohk.ethereum.healthcheck.HealthcheckResult]]
-                Event.error("health result internal error")
-                  .attribute(EventAttr.Status, result.status)
-                  .attribute(EventAttr.Error, result.error.toString)
-                  .send()
-            }
-          }
-        }
-      }
-
-      case Failure(t) ⇒ {
-        metrics.HealhcheckErrorCounter.increment()
-
-        Event.exception("health", t).send()
-      }
-    }
-  }
-
-  def shutdown(): Unit = {
-  }
+  def shutdown(): Unit = {}
 
   def handleRequest(request: JsonRpcRequest): Future[JsonRpcResponse] = {
     val startTimeNanos = System.nanoTime()
