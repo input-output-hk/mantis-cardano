@@ -3,7 +3,7 @@ package io.iohk.ethereum.utils
 import java.io.{IOException, PrintWriter}
 import java.net.InetAddress
 import java.util.LinkedList
-import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent._
 
 import com.googlecode.protobuf.format.FormatFactory
 import io.iohk.ethereum.buildinfo.MantisBuildInfo
@@ -23,7 +23,7 @@ trait Riemann extends Logger {
   private val riemannClient: IRiemannClient = {
     log.debug("create new RiemannClient")
 
-    def stdoutClient(): IRiemannClient = {
+    val stdoutClient: IRiemannClient = {
       log.info("create new stdout riemann client")
       val client = new RiemannStdoutClient()
       client.connect()
@@ -34,24 +34,15 @@ trait Riemann extends Logger {
       Config.riemann match {
         case Some(config) => {
           log.info(s"create new riemann batch client connecting to ${config.host}:${config.port}")
-
-          try {
-            val client = new RiemannBatchClient(config)
-            client.connect()
-            client
-          } catch {
-            case e: IOException =>
-              log.error("failed to create riemann batch client, falling back to stdout client", e)
-              stdoutClient()
-          }
+          val client = new RiemannBatchClient(config, stdoutClient)
+          client.run()
+          client
         }
         case None => {
-          stdoutClient()
+          stdoutClient
         }
       }
     }
-
-    log.debug("riemann client connected")
 
     c
   }
@@ -106,7 +97,7 @@ trait Riemann extends Logger {
 
 object Riemann extends Riemann
 
-class RiemannBatchClient(config: RiemannConfiguration) extends IRiemannClient with Logger {
+class RiemannBatchClient(config: RiemannConfiguration, fallbackClient: IRiemannClient) extends IRiemannClient with Logger {
   private def promise[A](v: A): Promise[A] = {
     val p: Promise[A] = new Promise()
     p.deliver(v)
@@ -118,11 +109,11 @@ class RiemannBatchClient(config: RiemannConfiguration) extends IRiemannClient wi
     promise(msg)
   }
 
-  private val jsonFormatter = new FormatFactory().createFormatter(FormatFactory.Formatter.JSON)
-
   protected val queue: BlockingQueue[Event] = new ArrayBlockingQueue(config.bufferSize)
 
   private val client = RiemannClient.tcp(config.host, config.port)
+
+  private val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
 
   protected def sendBatch(): Unit = {
     val batch: LinkedList[Event] = new LinkedList()
@@ -136,19 +127,13 @@ class RiemannBatchClient(config: RiemannConfiguration) extends IRiemannClient wi
       val result = p.deref()
       log.trace(s"sent batch with result: $result")
     } catch {
-      case e: IOException =>
-        log.error(e.toString)
-        batch.asScala
-          .foreach { event =>
-            {
-              // scalastyle:off
-              System.err.println(jsonFormatter.printToString(event))
-            }
-          }
+      case e: Throwable =>
+        log.error(s"Error during sending events to Riemann: ${e.toString}")
+        fallbackClient.sendEvents(batch)
     }
   }
 
-  val sender: () => Unit = { () =>
+  private val sender: Runnable = () => {
     log.trace("run sender")
     while (queue.size() > 0) {
       log.trace("sending batch of Riemann events")
@@ -157,12 +142,15 @@ class RiemannBatchClient(config: RiemannConfiguration) extends IRiemannClient wi
     }
   }
 
-  override def sendEvent(event: Event) = {
+  private def scheduleSender() = {
+    executor.scheduleAtFixedRate(sender, config.autoFlushMilliseconds, config.autoFlushMilliseconds, TimeUnit.MILLISECONDS)
+  }
+
+  override def sendEvent(event: Event): Promise[Msg] = {
     val res = queue.offer(event)
     if (!res) {
       log.error("Riemann buffer full")
-      // scalastyle:off
-      System.err.println(s"${jsonFormatter.printToString(event)}")
+      fallbackClient.sendEvent(event)
     }
     simpleMsg(event)
   }
@@ -197,31 +185,25 @@ class RiemannBatchClient(config: RiemannConfiguration) extends IRiemannClient wi
   override def sendException(service: String, t: Throwable): IPromise[Msg] =
     client.sendException(service, t)
 
-  private var sendExecutor: ScheduledExecutorService = null
-
-  private def tryConnect(times: Int): Unit = {
-    if (times < 1) {
-      try {
-        client.reconnect()
-      } catch {
-        case e: IOException =>
-          log.error("unable to connect to Riemann, wait and try again")
-          Thread.sleep(1000)
-          tryConnect(times + 1)
-      }
-    } else {
-      client.reconnect()
+  override def connect(): Unit = {
+    try {
+      client.connect()
+      log.info("connected successfully to riemann server")
+    } catch {
+      case _: IOException =>
+        log.error("unable to connect to Riemann, it will try to connect later")
     }
   }
 
-  override def connect() = {
-    tryConnect(0)
-    sendExecutor = Scheduler.startRunner(config.autoFlushMilliseconds, TimeUnit.MILLISECONDS, sender)
+  def run(): Unit = {
+    connect()
+    scheduleSender()
   }
 
   override def close(): Unit = {
+    executor.shutdown()
+    flush()
     client.close()
-    sendExecutor.shutdown()
   }
 
   override def flush(): Unit = client.flush()
@@ -229,9 +211,13 @@ class RiemannBatchClient(config: RiemannConfiguration) extends IRiemannClient wi
   override def isConnected(): Boolean = client.isConnected
 
   override def reconnect(): Unit = {
-    client.reconnect()
-    sendExecutor.shutdown()
-    sendExecutor = Scheduler.startRunner(config.autoFlushMilliseconds, TimeUnit.MILLISECONDS, sender)
+    try {
+      client.reconnect()
+      log.info("reconnected successfully to riemann server")
+    } catch {
+      case _: IOException =>
+        log.error("unable to reconnect to Riemann")
+    }
   }
 
   override def transport(): Transport = this
@@ -251,13 +237,13 @@ class RiemannStdoutClient extends IRiemannClient {
     promise(msg)
   }
 
-  private val jsonFormatter = (new FormatFactory()).createFormatter(FormatFactory.Formatter.JSON)
+  private val jsonFormatter = new FormatFactory().createFormatter(FormatFactory.Formatter.JSON)
 
-  override def connect() = {
+  override def connect(): Unit = {
     connected = true
   }
 
-  override def sendEvent(event: Event) = {
+  override def sendEvent(event: Event): Promise[Msg] = {
     // scalastyle:off
     println(jsonFormatter.printToString(event))
     simpleMsg(event)
