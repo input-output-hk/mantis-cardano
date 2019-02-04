@@ -5,6 +5,7 @@ project/boot/
 project/plugins/project/
 .ensime
 .ensime_cache/
+.DS_Store
 
 # intellij scala worksheet
 *.sc
