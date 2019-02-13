@@ -15,6 +15,7 @@ object BlockchainTestConfig {
     eip155BlockNumber = Long.MaxValue,
     eip160BlockNumber = Long.MaxValue,
     eip161BlockNumber = Long.MaxValue,
+    danseBlockNumber = Long.MaxValue,
     // unused
     maxCodeSize = None,
     difficultyBombPauseBlockNumber = 3000000,
