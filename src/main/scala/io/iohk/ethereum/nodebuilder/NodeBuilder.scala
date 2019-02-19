@@ -462,7 +462,8 @@ trait SyncControllerBuilder {
 }
 
 trait HealthcheckServiceConfigBuilder {
-  lazy val hcsConfig = HealthcheckServiceConfig(Config.config)
+  self: VmConfigBuilder =>
+  lazy val hcsConfig = HealthcheckServiceConfig(Config.config, vmConfig)
 }
 trait HealthcheckServiceBuilder {
   self: HealthcheckServiceConfigBuilder with NetServiceBuilder with EthServiceBuilder =>

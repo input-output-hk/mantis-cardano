@@ -1,12 +1,15 @@
 package io.iohk.ethereum.healthcheck
 
 import com.typesafe.config.Config
+import io.iohk.ethereum.utils.VmConfig
+import io.iohk.ethereum.utils.VmConfig.ExternalConfig
 
 import scala.concurrent.duration._
 
 case class HealthcheckServiceConfig(
   uptimeGracePeriod: Duration,
-  lastImportGracePeriod: Duration
+  lastImportGracePeriod: Duration,
+  isIeleVM: Boolean
 )
 
 object HealthcheckServiceConfig {
@@ -42,9 +45,11 @@ object HealthcheckServiceConfig {
   val StdLastImportGracePeriod = Duration(StdSeconds, SECONDS)
 
 
-  def apply(mantisConfig: Config): HealthcheckServiceConfig = {
+  def apply(mantisConfig: Config, vmConfig: VmConfig): HealthcheckServiceConfig = {
+    val isIeleVM = vmConfig.externalConfig.exists(_.vmType == ExternalConfig.VmTypeIele)
+
     if(!mantisConfig.hasPath(Keys.Healthchecks)) {
-      HealthcheckServiceConfig(StdUptimeGracePeriod, StdLastImportGracePeriod)
+      HealthcheckServiceConfig(StdUptimeGracePeriod, StdLastImportGracePeriod, isIeleVM)
     }
     else {
       val config = mantisConfig.getConfig(Keys.Healthchecks)
@@ -55,7 +60,7 @@ object HealthcheckServiceConfig {
       val uptimeGracePeriod = getDuration(Keys.UptimeGracePeriod, StdUptimeGracePeriod)
       val lastImportGracePeriod = getDuration(Keys.LastImportGracePeriod, StdLastImportGracePeriod)
 
-      HealthcheckServiceConfig(uptimeGracePeriod, lastImportGracePeriod)
+      HealthcheckServiceConfig(uptimeGracePeriod, lastImportGracePeriod, isIeleVM)
     }
   }
 }
