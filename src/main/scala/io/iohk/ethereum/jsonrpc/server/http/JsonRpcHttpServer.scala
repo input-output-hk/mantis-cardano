@@ -18,16 +18,16 @@ import io.iohk.ethereum.buildinfo.MantisBuildInfo
 import io.iohk.ethereum.jsonrpc._
 import io.iohk.ethereum.jsonrpc.server.SslSetup.CertificateConfig
 import io.iohk.ethereum.metrics.Metrics
+import io.iohk.ethereum.utils.JsonUtils.{Formats, Serialization}
 import io.iohk.ethereum.utils.events._
 import io.iohk.ethereum.utils.{ConfigUtils, JsonUtils, Logger}
-import io.iohk.ethereum.utils.JsonUtils.{Formats, Serialization}
 import org.json4s.JsonAST.{JInt, JString}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
-trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
+trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport with JsonMetricsHttpServer {
   val jsonRpcController: JsonRpcController
 
   def corsAllowedOrigins: HttpOriginRange
@@ -61,19 +61,20 @@ trait JsonRpcHttpServer extends Json4sSupport with Logger with EventSupport {
     }
 
   val mainRoute: Route = {
+    metricsRoute ~
     (path("healthcheck") & pathEndOrSingleSlash & get) {
       handleHealthcheck()
     } ~
-      (path("buildinfo") & pathEndOrSingleSlash & get) {
-        handleBuildInfo()
-      } ~
-      (pathEndOrSingleSlash & post) {
-        entity(as[JsonRpcRequest]) { request =>
-          handleRequest(request)
-        } ~ entity(as[Seq[JsonRpcRequest]]) { request =>
-          handleBatchRequest(request)
-        }
+    (path("buildinfo") & pathEndOrSingleSlash & get) {
+      handleBuildInfo()
+    } ~
+    (pathEndOrSingleSlash & post) {
+      entity(as[JsonRpcRequest]) { request =>
+        handleRequest(request)
+      } ~ entity(as[Seq[JsonRpcRequest]]) { request =>
+        handleBatchRequest(request)
       }
+    }
   }
 
   val strictEntityTimeout = FiniteDuration(2 * 150, TimeUnit.MILLISECONDS)
@@ -293,7 +294,7 @@ object JsonRpcHttpServer extends Logger {
   )
 
   object JsonRpcHttpServerConfig {
-    import com.typesafe.config.{Config ⇒ TypesafeConfig}
+    import com.typesafe.config.{Config => TypesafeConfig}
 
     def apply(mantisConfig: TypesafeConfig): JsonRpcHttpServerConfig = {
       val rpcHttpConfig = mantisConfig.getConfig("network.rpc.http")
