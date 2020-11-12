@@ -104,17 +104,7 @@ val root = project.in(file("."))
     .settings(commonSettings: _*)
     .settings(
       libraryDependencies ++= dep,
-      verifyOutputFile in verifyGenerate := baseDirectory.value / "verify.sbt",
-      verifyOptions in verify := VerifyOptions(
-        includeBin = true,
-        includeScala = true,
-        includeDependency = true,
-        excludedJars = Nil,
-        warnOnUnverifiedFiles = false,
-        warnOnUnusedVerifications = false
-      ),
-      executableScriptName := name.value,
-      dist in Universal := ((dist in Universal) dependsOn verify).value
+      executableScriptName := name.value
     )
     .settings(inConfig(Integration)(Defaults.testSettings) : _*)
     .settings(inConfig(Benchmark)(Defaults.testSettings) : _*)
