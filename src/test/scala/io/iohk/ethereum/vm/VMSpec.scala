@@ -4,7 +4,7 @@ import akka.util.ByteString
 import akka.util.ByteString.{empty => bEmpty}
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.vm.MockWorldState._
-import org.scalatest.{WordSpec, Matchers}
+import org.scalatest.{Matchers, WordSpec}
 import org.scalatest.prop.PropertyChecks
 
 class VMSpec extends WordSpec with PropertyChecks with Matchers {

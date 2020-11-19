@@ -3,6 +3,7 @@ package io.iohk.ethereum.jsonrpc
 import akka.util.ByteString
 import io.iohk.ethereum.domain.{Block, BlockHeader}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
+import io.iohk.ethereum.utils.ByteStringUtils
 
 case class BlockResponse(
     number: BigInt,
@@ -22,6 +23,8 @@ case class BlockResponse(
     gasLimit: BigInt,
     gasUsed: BigInt,
     timestamp: BigInt,
+    signature: String,
+    signer: String,
     transactions: Either[Seq[ByteString], Seq[TransactionResponse]],
     uncles: Seq[ByteString])
 
@@ -36,6 +39,8 @@ object BlockResponse {
         })
       else
         Left(block.body.transactionList.map(_.hash))
+
+    val signer = BlockHeader.recoverPubKey(block.header).map(ByteStringUtils.hash2string)
 
     BlockResponse(
       number = block.header.number,
@@ -55,6 +60,8 @@ object BlockResponse {
       gasLimit = block.header.gasLimit,
       gasUsed = block.header.gasUsed,
       timestamp = block.header.unixTimestamp,
+      signature = block.header.signature.map(s => ByteStringUtils.hash2string(s.toBytes)).getOrElse("n/a"),
+      signer = signer.getOrElse("n/a"),
       transactions = transactions,
       uncles = block.body.uncleNodesList.map(_.hash)
     )

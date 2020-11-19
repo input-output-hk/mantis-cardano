@@ -22,5 +22,7 @@ trait StdTestConsensusBuilder extends StdConsensusBuilder
   with StorageBuilder
   with BlockchainConfigBuilder
   with ConsensusConfigBuilder
+  with NodeKeyBuilder
+  with SecureRandomBuilder
   with ShutdownHookBuilder
   with Logger

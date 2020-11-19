@@ -101,7 +101,8 @@ class EthashMiner(
         ethService.submitHashRate(SubmitHashRateRequest(hashRate, ByteString("mantis-miner")))
         mineResult match {
           case MiningSuccessful(_, pow, nonce) =>
-            syncController ! RegularSync.MinedBlock(block.copy(header = block.header.copy(nonce = nonce, mixHash = pow.mixHash)))
+            val minedAndSigned = addPowAndSignature(block, pow, nonce)
+            syncController ! RegularSync.MinedBlock(minedAndSigned)
           case _ => // nothing
         }
         self ! ProcessMining
@@ -109,6 +110,18 @@ class EthashMiner(
       case Failure(ex) =>
         log.error(ex, "Unable to get block for mining")
         context.system.scheduler.scheduleOnce(10.seconds, self, ProcessMining)
+    }
+  }
+
+  private def addPowAndSignature(block: Block, pow: ProofOfWork, nonce: ByteString): Block = {
+    val powHeader = block.header.copy(nonce = nonce, mixHash = pow.mixHash)
+
+    if (!consensusConfig.requireSignedBlocks)
+      block.copy(header = powHeader)
+    else {
+      val signature = BlockHeader.sign(powHeader, consensusConfig.nodeKey)
+      val signedHeader = powHeader.copy(signature = Some(signature))
+      block.copy(header = signedHeader)
     }
   }
 

@@ -47,7 +47,7 @@ class DifficultySpec extends FlatSpec with Matchers with PropertyChecks {
   )
 
   it should "validate difficulty for AtomixRaft block header" in new ScenarioSetup {
-    val blockHeaderValidator = new AtomixRaftBlockHeaderValidator(blockchainConfig)
+    val blockHeaderValidator = new AtomixRaftBlockHeaderValidator(blockchainConfig, consensusConfig)
     val calculator = AtomixRaftDifficulty
 
     val blockNumber: BigInt = parentHeader.number + 1

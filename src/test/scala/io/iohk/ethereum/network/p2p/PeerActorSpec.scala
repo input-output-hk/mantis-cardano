@@ -15,7 +15,7 @@ import akka.testkit.{TestActorRef, TestProbe}
 import akka.util.ByteString
 import io.iohk.ethereum.crypto.generateKeyPair
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
-import io.iohk.ethereum.{Fixtures, Mocks, Timeouts, crypto}
+import io.iohk.ethereum.{Fixtures, Mocks, Timeouts}
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.network.{ForkResolver, PeerActor, PeerEventBusActor}
@@ -188,7 +188,7 @@ class PeerActorSpec extends FlatSpec with Matchers {
       ByteString("unused"), ByteString("unused"), ByteString("unused"), ByteString("unused"),
       ByteString("unused"), ByteString("unused"), ByteString("unused"),
       daoForkBlockTotalDifficulty + 100000, 3000000 ,0, 0, 0,
-      ByteString("unused"),ByteString("unused"),ByteString("unused"))
+      ByteString("unused"), ByteString("unused"),ByteString("unused"))
     storagesInstance.storages.appStateStorage.putBestBlockNumber(3000000) // after the fork
     blockchain.save(header)
     storagesInstance.storages.blockNumberMappingStorage.put(3000000, header.hash)
@@ -376,7 +376,6 @@ class PeerActorSpec extends FlatSpec with Matchers {
   }
 
   trait NodeStatusSetup extends SecureRandomBuilder with EphemBlockchainTestSetup {
-    val nodeKey = crypto.generateKeyPair(secureRandom)
 
     val nodeStatus = NodeStatus(
       key = nodeKey,

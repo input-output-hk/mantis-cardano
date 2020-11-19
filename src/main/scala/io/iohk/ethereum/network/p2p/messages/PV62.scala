@@ -1,6 +1,7 @@
 package io.iohk.ethereum.network.p2p.messages
 
 import akka.util.ByteString
+import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.domain.{BlockHeader, SignedTransaction}
 import io.iohk.ethereum.network.p2p.{Message, MessageSerializableImplicit}
 import io.iohk.ethereum.rlp.RLPImplicitConversions._
@@ -121,8 +122,16 @@ object PV62 {
     implicit class BlockHeaderEnc(blockHeader: BlockHeader) extends RLPSerializable {
       override def toRLPEncodable: RLPEncodeable = {
         import blockHeader._
-        RLPList(parentHash, ommersHash, beneficiary, stateRoot, transactionsRoot, receiptsRoot,
-          logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData, mixHash, nonce)
+        blockHeader.signature match {
+          case Some(sig) =>
+            RLPList(parentHash, ommersHash, beneficiary, stateRoot, transactionsRoot, receiptsRoot,
+              logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData, mixHash, nonce, sig.toBytes)
+
+          case None =>
+            RLPList(parentHash, ommersHash, beneficiary, stateRoot, transactionsRoot, receiptsRoot,
+              logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData, mixHash, nonce)
+        }
+
       }
     }
 
@@ -138,9 +147,21 @@ object PV62 {
       def toBlockHeader: BlockHeader = {
         rlpEncodeable match {
           case RLPList(parentHash, ommersHash, beneficiary, stateRoot, transactionsRoot, receiptsRoot,
-          logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData, mixHash, nonce) =>
+            logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData, mixHash, nonce, signature)
+            if signature.size == ECDSASignature.EncodedLength =>
+
+            BlockHeader(parentHash, ommersHash, beneficiary, stateRoot, transactionsRoot, receiptsRoot,
+              logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData,
+              mixHash, nonce, ECDSASignature.fromBytes(signature))
+
+          case RLPList(parentHash, ommersHash, beneficiary, stateRoot, transactionsRoot, receiptsRoot,
+            logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData, mixHash, nonce) =>
+
             BlockHeader(parentHash, ommersHash, beneficiary, stateRoot, transactionsRoot, receiptsRoot,
               logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData, mixHash, nonce)
+
+          case _ =>
+            throw new RuntimeException("Cannot decode BlockHeader")
         }
       }
     }

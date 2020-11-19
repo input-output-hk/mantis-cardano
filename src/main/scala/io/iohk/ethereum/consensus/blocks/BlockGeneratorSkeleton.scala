@@ -93,20 +93,20 @@ abstract class BlockGeneratorSkeleton(
     val body = newBlockBody(transactionsForBlock, x)
     val block = Block(header, body)
 
-    val prepared = blockPreparator.prepareBlock(block) match {
-      case BlockPreparationResult(prepareBlock, BlockResult(_, gasUsed, receipts), stateRoot, updatedWorld) =>
+    blockPreparator.prepareBlock(block) match {
+      case BlockPreparationResult(preparedBlock, BlockResult(_, gasUsed, receipts), stateRoot, updatedWorld) =>
         val receiptsLogs: Seq[Array[Byte]] = BloomFilter.EmptyBloomFilter.toArray +: receipts.map(_.logsBloomFilter.toArray)
         val bloomFilter = ByteString(or(receiptsLogs: _*))
 
-        PendingBlockAndState(PendingBlock(block.copy(header = block.header.copy(
-          transactionsRoot = buildMpt(prepareBlock.body.transactionList, SignedTransaction.byteArraySerializable),
+        val updatedHeader = block.header.copy(
+          transactionsRoot = buildMpt(preparedBlock.body.transactionList, SignedTransaction.byteArraySerializable),
           stateRoot = stateRoot,
           receiptsRoot = buildMpt(receipts, Receipt.byteArraySerializable(blockchainConfig.ethCompatibilityMode)),
           logsBloom = bloomFilter,
-          gasUsed = gasUsed),
-          body = prepareBlock.body), receipts), updatedWorld)
+          gasUsed = gasUsed)
+
+        PendingBlockAndState(PendingBlock(block.copy(header = updatedHeader, body = preparedBlock.body), receipts), updatedWorld)
     }
-    prepared
   }
 
   protected def prepareTransactions(

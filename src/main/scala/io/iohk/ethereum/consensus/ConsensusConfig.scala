@@ -1,11 +1,13 @@
 package io.iohk.ethereum.consensus
 
 import akka.util.ByteString
-import com.typesafe.config.{Config ⇒ TypesafeConfig}
+import com.typesafe.config.{Config => TypesafeConfig}
 import io.iohk.ethereum.consensus.validators.BlockHeaderValidator
 import io.iohk.ethereum.domain.Address
-import io.iohk.ethereum.nodebuilder.ShutdownHookBuilder
-import io.iohk.ethereum.utils.Logger
+import io.iohk.ethereum.utils.{ByteStringUtils, Logger}
+import org.spongycastle.crypto.AsymmetricCipherKeyPair
+
+import scala.collection.JavaConverters._
 
 
 /**
@@ -22,7 +24,10 @@ final case class ConsensusConfig(
   headerExtraData: ByteString, // only used in BlockGenerator
   blockCacheSize: Int, // only used in BlockGenerator
   miningEnabled: Boolean,
-  minGasPrice: BigInt
+  minGasPrice: BigInt,
+  requireSignedBlocks: Boolean,
+  nodeKey: AsymmetricCipherKeyPair, //used to sign generated blocks
+  fedPubKeys: Set[ByteString] //approved block miners
 )
 
 object ConsensusConfig extends Logger {
@@ -33,7 +38,9 @@ object ConsensusConfig extends Logger {
     final val HeaderExtraData = "header-extra-data"
     final val BlockCacheSize = "block-cashe-size"
     final val MiningEnabled = "mining-enabled"
+    final val RequireSignedBlocks = "require-signed-blocks"
     final val MinGasPrice = "min-gas-price"
+    final val FedPubKeys = "federation-public-keys"
   }
 
 
@@ -61,7 +68,7 @@ object ConsensusConfig extends Logger {
   }
 
 
-  def apply(mantisConfig: TypesafeConfig)(shutdownHook: ShutdownHookBuilder): ConsensusConfig = {
+  def apply(mantisConfig: TypesafeConfig, nodeKey: AsymmetricCipherKeyPair): ConsensusConfig = {
     val config = mantisConfig.getConfig(Keys.Consensus)
 
     val protocol = readProtocol(config)
@@ -71,7 +78,9 @@ object ConsensusConfig extends Logger {
       .take(BlockHeaderValidator.MaxExtraDataSize)
     val blockCacheSize = config.getInt(Keys.BlockCacheSize)
     val miningEnabled = config.getBoolean(Keys.MiningEnabled)
+    val requireSignedBlocks = config.getBoolean(Keys.RequireSignedBlocks)
     val minGasPrice = BigInt(config.getString(Keys.MinGasPrice))
+    val fedPubKeys = config.getStringList(Keys.FedPubKeys).asScala.map(ByteStringUtils.string2hash).toSet
 
     new ConsensusConfig(
       protocol = protocol,
@@ -79,7 +88,10 @@ object ConsensusConfig extends Logger {
       headerExtraData = headerExtraData,
       blockCacheSize = blockCacheSize,
       miningEnabled = miningEnabled,
-      minGasPrice = minGasPrice
+      minGasPrice = minGasPrice,
+      requireSignedBlocks = requireSignedBlocks,
+      nodeKey = nodeKey,
+      fedPubKeys = fedPubKeys
     )
   }
 }

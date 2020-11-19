@@ -1,6 +1,7 @@
 package io.iohk.ethereum.consensus.validators
 
 import akka.util.ByteString
+import io.iohk.ethereum.consensus.ConsensusConfig
 import io.iohk.ethereum.consensus.difficulty.DifficultyCalculator
 import io.iohk.ethereum.consensus.validators.BlockHeaderError._
 import io.iohk.ethereum.domain.BlockHeader
@@ -17,7 +18,7 @@ import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig}
  * The latter is treated polymorphically by directly using a difficulty
  * [[io.iohk.ethereum.consensus.difficulty.DifficultyCalculator calculator]].
  */
-abstract class BlockHeaderValidatorSkeleton(blockchainConfig: BlockchainConfig) extends BlockHeaderValidator {
+abstract class BlockHeaderValidatorSkeleton(blockchainConfig: BlockchainConfig, consensusConfig: ConsensusConfig) extends BlockHeaderValidator {
 
   import BlockHeaderValidator._
 
@@ -49,6 +50,7 @@ abstract class BlockHeaderValidatorSkeleton(blockchainConfig: BlockchainConfig) 
       _ <- validateGasLimit(blockHeader, parentHeader)
       _ <- validateNumber(blockHeader, parentHeader)
       _ <- validateEvenMore(blockHeader, parentHeader)
+      _ <- validateSignature(blockHeader)
     } yield BlockHeaderValid
   }
 
@@ -183,6 +185,19 @@ abstract class BlockHeaderValidatorSkeleton(blockchainConfig: BlockchainConfig) 
   private def validateNumber(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] =
     if(blockHeader.number == parentHeader.number + 1) Right(BlockHeaderValid)
     else Left(HeaderNumberError)
+
+  private def validateSignature(header: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
+    if (!consensusConfig.requireSignedBlocks)
+      Right(BlockHeaderValid)
+    else {
+      val maybePubKey = BlockHeader.recoverPubKey(header)
+
+      if (maybePubKey.exists(consensusConfig.fedPubKeys.contains))
+        Right(BlockHeaderValid)
+      else
+        Left(HeaderSignatureError)
+    }
+  }
 }
 
 

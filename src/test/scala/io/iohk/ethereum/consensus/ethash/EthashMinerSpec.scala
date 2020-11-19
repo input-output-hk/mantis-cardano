@@ -28,8 +28,7 @@ import scala.concurrent.duration._
 class EthashMinerSpec extends FlatSpec with Matchers {
   final val EthashMinerSpecTag = Tag("EthashMinerSpec")
 
-  "EthashMiner" should "mine valid blocks" taggedAs(EthashMinerSpecTag) in new TestSetup {
-    val parent = origin
+  "EthashMiner" should "mine valid blocks" taggedAs (EthashMinerSpecTag) in new TestSetup {
     val bfm = blockForMining(parent.header)
 
     (blockchain.getBestBlock _).expects().returns(parent).anyNumberOfTimes()
@@ -61,9 +60,36 @@ class EthashMinerSpec extends FlatSpec with Matchers {
     blockHeaderValidator.validate(block.header, parent.header) shouldBe Right(BlockHeaderValid)
   }
 
+  it should "sign blocks if required" in new TestSetup {
+    override lazy val consensusConfig: ConsensusConfig = buildConsensusConfig().copy(requireSignedBlocks = true)
+
+    val bfm = blockForMining(parent.header)
+
+    (blockchain.getBestBlock _).expects().returns(parent).anyNumberOfTimes()
+    (ethService.submitHashRate _).expects(*).returns(Future.successful(Right(SubmitHashRateResponse(true)))).atLeastOnce()
+    (blockGenerator.generateBlock _).expects(parent, Nil, consensusConfig.coinbase, Nil).returning(Right(PendingBlock(bfm, Nil))).atLeastOnce()
+
+    ommersPool.setAutoPilot { (sender: ActorRef, msg: Any) =>
+      sender ! OmmersPool.Ommers(Nil)
+      TestActor.KeepRunning
+    }
+
+    txPool.setAutoPilot { (sender, _) =>
+      sender ! TransactionPool.PendingTransactionsResponse(Nil)
+      TestActor.KeepRunning
+    }
+
+    miner ! EthashMiner.StartMining
+    val block = waitForMinedBlock()
+    miner ! EthashMiner.StopMining
+
+    block.header.signature shouldBe 'defined
+    blockHeaderValidator.validate(block.header, parent.header) shouldBe Right(BlockHeaderValid)
+  }
+
   trait TestSetup extends ScenarioSetup with MockFactory {
 
-    val origin = Block(
+    val parent = Block(
       BlockHeader(
         parentHash = ByteString(Hex.decode("0000000000000000000000000000000000000000000000000000000000000000")),
         ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
@@ -135,7 +161,7 @@ class EthashMinerSpec extends FlatSpec with Matchers {
       ), BlockBody(Seq(txToMine), Nil))
     }
 
-    val blockHeaderValidator = new EthashBlockHeaderValidator(blockchainConfig)
+    lazy val blockHeaderValidator = new EthashBlockHeaderValidator(blockchainConfig, consensusConfig)
 
     override implicit lazy val system = ActorSystem("MinerSpec_System")
 
@@ -158,4 +184,5 @@ class EthashMinerSpec extends FlatSpec with Matchers {
     }
 
   }
+
 }

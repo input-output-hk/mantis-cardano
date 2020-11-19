@@ -3,11 +3,17 @@ package io.iohk.ethereum
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
+import io.iohk.ethereum.utils.ByteStringUtils
+import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import org.spongycastle.util.encoders.Hex
 
 object Fixtures {
 
   object Blocks {
+
+    // one of the priv keys from test config
+    val signingKey: ByteString =
+      ByteStringUtils.string2hash("238b5c902db6c37d337ec008bcb96cb1d34333986e83836662011b38a496921d")
 
     trait FixtureBlock {
       val header: BlockHeader
@@ -16,6 +22,30 @@ object Fixtures {
       val size: Long
 
       def block: Block = Block(header, body)
+    }
+
+    implicit class BlockHeaderOps(val header: BlockHeader) extends AnyVal {
+      def sign(keyPair: AsymmetricCipherKeyPair): BlockHeader = {
+        val sig = BlockHeader.sign(header, keyPair)
+        header.copy(signature = Some(sig))
+      }
+
+      def sign(prvKey: Array[Byte]): BlockHeader =
+        sign(crypto.keyPairFromPrvKey(prvKey))
+
+      def sign(prvKey: ByteString): BlockHeader =
+        sign(prvKey.toArray)
+    }
+
+    implicit class BlockOps(val block: Block) extends AnyVal {
+      def sign(keyPair: AsymmetricCipherKeyPair): Block =
+        block.copy(header = block.header.sign(keyPair))
+
+      def sign(prvKey: Array[Byte]): Block =
+        block.copy(header = block.header.sign(prvKey))
+
+      def sign(prvKey: ByteString): Block =
+        block.copy(header = block.header.sign(prvKey))
     }
 
     object ValidBlock extends FixtureBlock {
@@ -160,6 +190,7 @@ object Fixtures {
         mixHash = ByteString(Hex.decode("c52daa7054babe515b17ee98540c0889cf5e1595c5dd77496997ca84a68c8da1")),
         nonce = ByteString(Hex.decode("05276a600980199d"))
       )
+
       override val body: BlockBody = BlockBody(
         transactionList = Seq[SignedTransaction](
           SignedTransaction(
@@ -248,6 +279,7 @@ object Fixtures {
         mixHash = ByteString(Hex.decode("5b5acbf4bf305f948bd7be176047b20623e1417f75597341a059729165b92397")),
         nonce = ByteString(Hex.decode("bede87201de42426"))
       )
+
       override lazy val body: BlockBody = BlockBody(
         transactionList = Seq[SignedTransaction](
           SignedTransaction(
@@ -334,6 +366,7 @@ object Fixtures {
         mixHash = ByteString(Hex.decode("7f9ac1ddeafff0f926ed9887b8cf7d50c3f919d902e618b957022c46c8b404a6")),
         nonce = ByteString(Hex.decode("60832709c8979daa"))
       )
+
       override lazy val body: BlockBody = ???
       override lazy val transactionHashes: Seq[ByteString] = ???
       override lazy val size: Long = ???
