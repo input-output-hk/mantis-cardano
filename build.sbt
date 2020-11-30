@@ -11,7 +11,7 @@ val commonSettings = Seq(
 
 // Temp resolver for LevelDB fork
 resolvers += "stepsoft" at "http://nexus.mcsherrylabs.com/repository/releases/"
-resolvers += "Clojars" at "http://clojars.org/repo"
+resolvers += "Clojars" at "https://repo.clojars.org/"
 
 val dep = {
   val akkaVersion = "2.4.17"
@@ -104,17 +104,7 @@ val root = project.in(file("."))
     .settings(commonSettings: _*)
     .settings(
       libraryDependencies ++= dep,
-      verifyOutputFile in verifyGenerate := baseDirectory.value / "verify.sbt",
-      verifyOptions in verify := VerifyOptions(
-        includeBin = true,
-        includeScala = true,
-        includeDependency = true,
-        excludedJars = Nil,
-        warnOnUnverifiedFiles = false,
-        warnOnUnusedVerifications = false
-      ),
-      executableScriptName := name.value,
-      dist in Universal := ((dist in Universal) dependsOn verify).value
+      executableScriptName := name.value
     )
     .settings(inConfig(Integration)(Defaults.testSettings) : _*)
     .settings(inConfig(Benchmark)(Defaults.testSettings) : _*)
