@@ -82,7 +82,10 @@ case class BlockHeader(
 
 object BlockHeader {
 
-  val NumOfFields = 16
+  val NumOfFields = {
+    val be = ByteString.empty
+    BlockHeader(be, be, be, be, be, be, be, 0, 0, 0, 0, 0, be, be, be).productArity
+  }
 
   def getEncodedWithoutNonce(blockHeader: BlockHeader): Array[Byte] = {
     val rlpEncoded = blockHeader.toRLPEncodable match {

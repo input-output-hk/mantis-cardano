@@ -11,6 +11,7 @@ import io.iohk.ethereum.consensus.ethash.blocks.EthashBlockGenerator
 import io.iohk.ethereum.consensus.ethash.difficulty.EthashDifficultyCalculator
 import io.iohk.ethereum.consensus.ethash.validators.EthashBlockHeaderValidator
 import io.iohk.ethereum.consensus.validators.BlockHeaderValid
+import io.iohk.ethereum.{Fixtures, crypto}
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.jsonrpc.EthService
 import io.iohk.ethereum.jsonrpc.EthService.SubmitHashRateResponse
@@ -61,7 +62,11 @@ class EthashMinerSpec extends FlatSpec with Matchers {
   }
 
   it should "sign blocks if required" in new TestSetup {
-    override lazy val consensusConfig: ConsensusConfig = buildConsensusConfig().copy(requireSignedBlocks = true)
+    override lazy val consensusConfig: ConsensusConfig =
+      buildConsensusConfig().copy(
+        nodeKey = crypto.keyPairFromPrvKey(Fixtures.Blocks.signingKey.toArray),
+        requireSignedBlocks = true
+      )
 
     val bfm = blockForMining(parent.header)
 
