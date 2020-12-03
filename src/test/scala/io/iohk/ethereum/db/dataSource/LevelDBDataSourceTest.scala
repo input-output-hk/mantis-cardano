@@ -8,7 +8,7 @@ class LevelDBDataSourceTest extends FlatSpec with DataSourceTestBehavior {
     override val verifyChecksums: Boolean = true
     override val paranoidChecks: Boolean = true
     override val createIfMissing: Boolean = true
-    override val path: String = "/tmp/test/leveldb/"
+    override val path: String = System.getProperty("java.io.tmpdir") + "/test/leveldb/"
   })
 
   it should behave like dataSource(createDataSource)
