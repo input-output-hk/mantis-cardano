@@ -49,9 +49,24 @@ abstract class NoOmmersBlockGenerator(
     val pHeader = parent.header
     val blockNumber = pHeader.number + 1
 
-    val prepared = prepareBlock(parent, transactions, beneficiary, blockNumber, blockPreparator, x)
+    val prepared = addSignatureIfRequired(
+      prepareBlock(parent, transactions, beneficiary, blockNumber, blockPreparator, x)
+    )
     cache.updateAndGet((t: List[PendingBlockAndState]) => (prepared :: t).take(blockCacheSize))
 
     Right(prepared.pendingBlock)
+  }
+
+  private def addSignatureIfRequired(pendingBlockAndState: PendingBlockAndState): PendingBlockAndState = {
+    if (!consensusConfig.requireSignedBlocks)
+      pendingBlockAndState
+    else {
+      val header = pendingBlockAndState.pendingBlock.block.header
+      val signature = BlockHeader.sign(header, consensusConfig.nodeKey)
+      val signedHeader = header.copy(signature = Some(signature))
+      val signedBlock = pendingBlockAndState.pendingBlock.block.copy(header = signedHeader)
+      val signedPendingBlock = pendingBlockAndState.pendingBlock.copy(block = signedBlock)
+      pendingBlockAndState.copy(pendingBlock = signedPendingBlock)
+    }
   }
 }

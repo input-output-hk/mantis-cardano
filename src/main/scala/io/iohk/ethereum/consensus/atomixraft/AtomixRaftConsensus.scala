@@ -284,7 +284,7 @@ object AtomixRaftConsensus {
     vmConfig: VmConfig
   ): AtomixRaftConsensus = {
 
-    val validators = AtomixRaftValidators(blockchainConfig, vmConfig)
+    val validators = AtomixRaftValidators(blockchainConfig, vmConfig, config.generic)
 
     val blockPreparator = new BlockPreparator(
       vm = vm,

@@ -20,7 +20,7 @@ import io.iohk.ethereum.utils.BlockchainConfig
 trait ScenarioSetup extends StdTestConsensusBuilder with SyncConfigBuilder with StdLedgerBuilder {
   protected lazy val successValidators: Validators = Mocks.MockValidatorsAlwaysSucceed
   protected lazy val failureValidators: Validators = Mocks.MockValidatorsAlwaysFail
-  protected lazy val ethashValidators: EthashValidators = EthashValidators(blockchainConfig, vmConfig)
+  protected lazy val ethashValidators: EthashValidators = EthashValidators(blockchainConfig, vmConfig, consensusConfig)
 
   /**
    * The default validators for the test cases.

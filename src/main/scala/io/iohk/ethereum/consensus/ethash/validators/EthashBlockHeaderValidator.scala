@@ -1,6 +1,7 @@
 package io.iohk.ethereum.consensus.ethash
 package validators
 
+import io.iohk.ethereum.consensus.ConsensusConfig
 import io.iohk.ethereum.consensus.difficulty.DifficultyCalculator
 import io.iohk.ethereum.consensus.ethash.difficulty.EthashDifficultyCalculator
 import io.iohk.ethereum.consensus.validators.BlockHeaderError.HeaderPoWError
@@ -12,7 +13,8 @@ import io.iohk.ethereum.utils.BlockchainConfig
 /**
  * A block header validator for Ethash.
  */
-class EthashBlockHeaderValidator(blockchainConfig: BlockchainConfig) extends BlockHeaderValidatorSkeleton(blockchainConfig) {
+class EthashBlockHeaderValidator(blockchainConfig: BlockchainConfig, consensusConfig: ConsensusConfig)
+  extends BlockHeaderValidatorSkeleton(blockchainConfig, consensusConfig) {
   import EthashBlockHeaderValidator._
 
   // NOTE the below comment is from before PoW decoupling

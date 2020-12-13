@@ -1,12 +1,12 @@
 package io.iohk.ethereum.domain
 
 import akka.util.ByteString
-import io.iohk.ethereum.crypto.kec256
+import io.iohk.ethereum.crypto.{ECDSASignature, kec256}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockHeaderImplicits._
 import io.iohk.ethereum.rlp.{RLPList, encode => rlpEncode}
-import io.iohk.ethereum.utils.ToRiemann
-import io.iohk.ethereum.utils.Riemann
+import io.iohk.ethereum.utils.{ByteStringUtils, Riemann, ToRiemann}
 import io.riemann.riemann.client.EventDSL
+import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import org.spongycastle.util.encoders.Hex
 
 case class BlockHeader(
@@ -24,7 +24,8 @@ case class BlockHeader(
     unixTimestamp: Long,
     extraData: ByteString,
     mixHash: ByteString,
-    nonce: ByteString) extends ToRiemann {
+    nonce: ByteString,
+    signature: Option[ECDSASignature] = None) extends ToRiemann {
 
   override def toString: String = {
     s"""BlockHeader {
@@ -43,6 +44,7 @@ case class BlockHeader(
        |extraData: ${Hex.toHexString(extraData.toArray[Byte])}
        |mixHash: ${Hex.toHexString(mixHash.toArray[Byte])}
        |nonce: ${Hex.toHexString(nonce.toArray[Byte])}
+       |signature: ${signature.map(s => ByteStringUtils.hash2string(s.toBytes))}
        |}""".stripMargin
   }
 
@@ -62,6 +64,7 @@ case class BlockHeader(
       .attribute("gasUsed", gasUsed.toString)
       .attribute("unixTimestamp", unixTimestamp.toString)
       .attribute("extraData", Hex.toHexString(extraData.toArray[Byte]))
+      //TODO: signature?
 
   /**
     * calculates blockHash for given block header
@@ -79,11 +82,35 @@ case class BlockHeader(
 
 object BlockHeader {
 
+  val NumOfFields = {
+    val be = ByteString.empty
+    BlockHeader(be, be, be, be, be, be, be, 0, 0, 0, 0, 0, be, be, be).productArity
+  }
+
   def getEncodedWithoutNonce(blockHeader: BlockHeader): Array[Byte] = {
     val rlpEncoded = blockHeader.toRLPEncodable match {
-      case rlpList: RLPList => RLPList(rlpList.items.dropRight(2): _*)
+      case rlpList: RLPList => RLPList(rlpList.items.take(NumOfFields - 3): _*)
       case _ => throw new Exception("BlockHeader cannot be encoded without nonce and mixHash")
     }
     rlpEncode(rlpEncoded)
   }
+
+  private def getEncodedWithoutSignature(blockHeader: BlockHeader): Array[Byte] = {
+    val rlpEncoded = blockHeader.toRLPEncodable match {
+      case rlpList: RLPList => RLPList(rlpList.items.take(NumOfFields - 1): _*)
+      case _ => throw new Exception("BlockHeader cannot be encoded")
+    }
+    rlpEncode(rlpEncoded)
+  }
+
+  def sign(blockHeader: BlockHeader, keyPair: AsymmetricCipherKeyPair): ECDSASignature = {
+    val m = kec256(getEncodedWithoutSignature(blockHeader))
+    ECDSASignature.sign(m, keyPair)
+  }
+
+  def recoverPubKey(blockHeader: BlockHeader): Option[ByteString] = {
+    val m = kec256(getEncodedWithoutSignature(blockHeader))
+    blockHeader.signature.flatMap(_.publicKey(m)).map(ByteString(_))
+  }
+
 }

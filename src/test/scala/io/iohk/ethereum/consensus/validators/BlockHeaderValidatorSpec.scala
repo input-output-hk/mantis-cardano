@@ -2,13 +2,16 @@ package io.iohk.ethereum.consensus.validators
 
 import akka.util.ByteString
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
+import io.iohk.ethereum.consensus.ConsensusConfig
 import io.iohk.ethereum.consensus.ethash.difficulty.EthashDifficultyCalculator
 import io.iohk.ethereum.consensus.ethash.validators.EthashBlockHeaderValidator
 import io.iohk.ethereum.consensus.validators.BlockHeaderError._
 import io.iohk.ethereum.consensus.validators.BlockHeaderValidator._
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.utils.{BlockchainConfig, Config, DaoForkConfig}
-import io.iohk.ethereum.{Fixtures, ObjectGenerators}
+import io.iohk.ethereum.{Fixtures, ObjectGenerators, crypto}
+import io.iohk.ethereum.Fixtures.Blocks.{BlockHeaderOps, signingKey}
+import io.iohk.ethereum.crypto.ECDSASignature
 import org.scalatest.prop.PropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
@@ -23,15 +26,15 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   val MixHashLength = 32 //256bit
 
   val blockchainConfig = createBlockchainConfig()
+  val consensusConfig = ConsensusConfig(Config.config, crypto.keyPairFromPrvKey(signingKey.toArray))
+  val consensusConfigPermissioned = consensusConfig.copy(requireSignedBlocks = true)
 
-  val blockHeaderValidator = new EthashBlockHeaderValidator(blockchainConfig)
+  val blockHeaderValidator = new EthashBlockHeaderValidator(blockchainConfig, consensusConfig)
+  val blockHeaderValidatorPermissioned = new EthashBlockHeaderValidator(blockchainConfig, consensusConfigPermissioned)
   val difficultyCalculator = new EthashDifficultyCalculator(blockchainConfig)
 
   "BlockHeaderValidator" should "validate correctly formed BlockHeaders" in {
-    blockHeaderValidator.validate(validBlockHeader, validBlockParent) match {
-      case Right(_) => succeed
-      case _ => fail
-    }
+    blockHeaderValidatorPermissioned.validate(validBlockHeader, validBlockParent) shouldBe Right(BlockHeaderValid)
   }
 
   it should "return a failure if created based on invalid extra data" in {
@@ -40,31 +43,35 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
       MaxExtraDataSize + ExtraDataSizeLimit)
     ) { wrongExtraData =>
       val invalidBlockHeader = validBlockHeader.copy(extraData = wrongExtraData)
-      assert(blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) == Left(HeaderExtraDataError))
+      blockHeaderValidatorPermissioned.validate(invalidBlockHeader, validBlockParent) shouldBe Left(HeaderExtraDataError)
     }
   }
 
   it should "validate DAO block (extra data)" in {
     import Fixtures.Blocks._
     val cases = Table(
-      ("Block", "Parent Block", "Supports Dao Fork", "Valid"),
+      ("Block", "Parent Block", "Supports Dao Fork", "Should be valid"),
       (DaoForkBlock.header, DaoParentBlock.header, false, true),
       (DaoForkBlock.header, DaoParentBlock.header, true, false),
       (ProDaoForkBlock.header, DaoParentBlock.header, true, true),
       (ProDaoForkBlock.header, DaoParentBlock.header, false, true), // We don't care for extra data if no pro dao
-      (ProDaoForkBlock.header.copy(extraData = ByteString("Wrond DAO Extra")), DaoParentBlock.header, true, false),
+      (ProDaoForkBlock.header.copy(extraData = ByteString("Wrong DAO Extra")), DaoParentBlock.header, true, false),
       // We need to check extradata up to 10 blocks after
       (ProDaoBlock1920009Header, ProDaoBlock1920008Header, true, true),
-      (ProDaoBlock1920009Header.copy(extraData = ByteString("Wrond DAO Extra")), ProDaoBlock1920008Header, true, false),
+      (ProDaoBlock1920009Header.copy(extraData = ByteString("Wrong DAO Extra")), ProDaoBlock1920008Header, true, false),
       (ProDaoBlock1920010Header, ProDaoBlock1920009Header, true, true)
     )
 
-    forAll(cases) { (block, parentBlock, supportsDaoFork, valid ) =>
-      val blockHeaderValidator = new EthashBlockHeaderValidator(createBlockchainConfig(supportsDaoFork))
-      blockHeaderValidator.validate(block, parentBlock) match {
-        case Right(_) => assert(valid)
-        case Left(DaoHeaderExtraDataError) => assert(!valid)
-        case _ => fail()
+    forAll(cases) { (block, parentBlock, supportsDaoFork, shouldBeValid) =>
+      val blockHeaderValidator = new EthashBlockHeaderValidator(createBlockchainConfig(supportsDaoFork), consensusConfig)
+      val validationResult = blockHeaderValidator.validate(block, parentBlock)
+
+      shouldBeValid match {
+        case true =>
+          validationResult shouldBe Right(BlockHeaderValid)
+
+        case false =>
+          validationResult shouldBe Left(DaoHeaderExtraDataError)
       }
     }
   }
@@ -72,7 +79,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   it should "return a failure if created based on invalid timestamp" in {
     forAll(longGen) { timestamp =>
       val blockHeader = validBlockHeader.copy(unixTimestamp = timestamp)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
+      val validateResult = blockHeaderValidatorPermissioned.validate(blockHeader, validBlockParent)
       timestamp match {
         case t if t <= validBlockParent.unixTimestamp => assert(validateResult == Left(HeaderTimestampError))
         case validBlockHeader.unixTimestamp => assert(validateResult == Right(BlockHeaderValid))
@@ -84,7 +91,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   it should "return a failure if created based on invalid difficulty" in {
     forAll(bigIntGen) { difficulty =>
       val blockHeader = validBlockHeader.copy(difficulty = difficulty)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
+      val validateResult = blockHeaderValidatorPermissioned.validate(blockHeader, validBlockParent)
       if(difficulty != validBlockHeader.difficulty) assert(validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
@@ -93,7 +100,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   it should "return a failure if created based on invalid gas used" in {
     forAll(bigIntGen) { gasUsed =>
       val blockHeader = validBlockHeader.copy(gasUsed = gasUsed)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
+      val validateResult = blockHeaderValidatorPermissioned.validate(blockHeader, validBlockParent)
       if(gasUsed > validBlockHeader.gasLimit) assert(validateResult == Left(HeaderGasUsedError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
@@ -102,7 +109,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   it should "return a failure if created based on invalid negative gas used" in {
     val gasUsed = -1
     val blockHeader = validBlockHeader.copy(gasUsed = gasUsed)
-    val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
+    val validateResult = blockHeaderValidatorPermissioned.validate(blockHeader, validBlockParent)
     assert(validateResult == Left(HeaderGasUsedError))
   }
 
@@ -113,7 +120,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
 
     forAll(bigIntGen) { gasLimit =>
       val blockHeader = validBlockHeader.copy(gasLimit = gasLimit)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
+      val validateResult = blockHeaderValidatorPermissioned.validate(blockHeader, validBlockParent)
       if(gasLimit < LowerGasLimit || gasLimit > UpperGasLimit) {
         validateResult shouldBe a[Left[HeaderGasLimitErrorBounds, _]]
       }
@@ -124,13 +131,13 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   it should "return a failure if created with gas limit above threshold and block number >= eip106 block number" in {
     val validParent = validBlockParent.copy(gasLimit = Long.MaxValue)
     val invalidBlockHeader = validBlockHeader.copy(gasLimit = BigInt(Long.MaxValue) + 1)
-    blockHeaderValidator.validate(invalidBlockHeader, validParent) shouldBe a[Left[HeaderGasLimitErrorBounds, _]]
+    blockHeaderValidatorPermissioned.validate(invalidBlockHeader, validParent) shouldBe a[Left[HeaderGasLimitErrorBounds, _]]
   }
 
   it should "return a failure if created based on invalid number" in {
     forAll(longGen) { number =>
       val blockHeader = validBlockHeader.copy(number = number)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
+      val validateResult = blockHeaderValidatorPermissioned.validate(blockHeader, validBlockParent)
       if(number != validBlockParent.number + 1)
         assert(validateResult == Left(HeaderNumberError) || validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
@@ -144,21 +151,18 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     val blockHeaderWithInvalidMixHash = validBlockHeader.copy(mixHash = invalidMixHash)
     val blockHeaderWithInvalidNonceAndMixHash = validBlockHeader.copy(nonce = invalidNonce, mixHash = invalidMixHash)
 
-    blockHeaderValidator.validate(blockHeaderWithInvalidNonce, validBlockParent) shouldBe Left(HeaderPoWError)
-    blockHeaderValidator.validate(blockHeaderWithInvalidMixHash, validBlockParent) shouldBe Left(HeaderPoWError)
-    blockHeaderValidator.validate(blockHeaderWithInvalidNonceAndMixHash, validBlockParent) shouldBe Left(HeaderPoWError)
+    blockHeaderValidatorPermissioned.validate(blockHeaderWithInvalidNonce, validBlockParent) shouldBe Left(HeaderPoWError)
+    blockHeaderValidatorPermissioned.validate(blockHeaderWithInvalidMixHash, validBlockParent) shouldBe Left(HeaderPoWError)
+    blockHeaderValidatorPermissioned.validate(blockHeaderWithInvalidNonceAndMixHash, validBlockParent) shouldBe Left(HeaderPoWError)
   }
 
   it should "validate correctly a block whose parent is in storage" in new EphemBlockchainTestSetup {
     blockchain.save(validBlockParent)
-    blockHeaderValidator.validate(validBlockHeader, blockchain.getBlockHeaderByHash _) match {
-      case Right(_)  => succeed
-      case _ => fail
-    }
+    blockHeaderValidatorPermissioned.validate(validBlockHeader, blockchain.getBlockHeaderByHash _) shouldBe Right(BlockHeaderValid)
   }
 
   it should "return a failure if the parent's header is not in storage" in new EphemBlockchainTestSetup {
-    blockHeaderValidator.validate(validBlockHeader, blockchain.getBlockHeaderByHash _) match {
+    blockHeaderValidatorPermissioned.validate(validBlockHeader, blockchain.getBlockHeaderByHash _) match {
       case Left(HeaderParentNotFoundError) => succeed
       case _ => fail
     }
@@ -187,13 +191,30 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   it should "validate constant block gas limit" in new EphemBlockchainTestSetup {
     val constGasLimit = 5000000
     val constGasConfig = blockchainConfig.copy(constantBlockGasLimit = Some(constGasLimit))
-    val validator = new EthashBlockHeaderValidator(constGasConfig)
+    val validator = new EthashBlockHeaderValidator(constGasConfig, consensusConfigPermissioned)
 
     val validHeader = validBlockHeader.copy(gasLimit = constGasLimit)
     val invalidHeader = validBlockHeader.copy(gasLimit = constGasLimit - 1)
 
     validator.validate(validHeader, validBlockParent) shouldBe Left(HeaderPoWError) // nonce and mixhash were not adjusted
     validator.validate(invalidHeader, validBlockParent) shouldBe Left(HeaderGasLimitErrorConst(constGasLimit, invalidHeader.gasLimit))
+  }
+
+  it should "return a failure if signature is missing or invalid" in {
+    val headerMissingSignature = validBlockHeader.copy(signature = None)
+    val headerInvalidSignature = validBlockHeader.copy(signature = Some(ECDSASignature(0, 0, 0: Byte)))
+    val headerUnknownSigner = validBlockHeader.sign(Hex.decode("1167a41c432d1a494408b8fdeecd79bff89a5689925606dff8adf01f4bf92922"))
+
+    val table = Table(
+      ("header", "result"),
+      (headerMissingSignature, Left(HeaderSignatureError)),
+      (headerInvalidSignature, Left(HeaderSignatureError)),
+      (headerUnknownSigner, Left(HeaderSignatureError))
+    )
+
+    forAll(table) { (header, expectedResult) =>
+      blockHeaderValidatorPermissioned.validate(header, validBlockParent) shouldBe expectedResult
+    }
   }
 
   val pausedDifficultyBombBlock = BlockHeader(
@@ -248,7 +269,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     extraData = ByteString(Hex.decode("d783010507846765746887676f312e372e33856c696e7578")),
     mixHash = ByteString(Hex.decode("6bc729364c9b682cfa923ba9480367ebdfa2a9bca2a652fe975e8d5958f696dd")),
     nonce = ByteString(Hex.decode("797a8f3a494f937b"))
-  )
+  ).sign(signingKey)
 
   val validBlockParent = BlockHeader(
     parentHash = ByteString(Hex.decode("677a5fb51d52321b03552e3c667f602cc489d15fc1d7824445aee6d94a9db2e7")),

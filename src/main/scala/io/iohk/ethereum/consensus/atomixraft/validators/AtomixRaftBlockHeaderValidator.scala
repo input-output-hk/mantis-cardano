@@ -1,13 +1,14 @@
 package io.iohk.ethereum.consensus.atomixraft.validators
 
+import io.iohk.ethereum.consensus.ConsensusConfig
 import io.iohk.ethereum.consensus.atomixraft.difficulty.AtomixRaftDifficulty
 import io.iohk.ethereum.consensus.difficulty.DifficultyCalculator
 import io.iohk.ethereum.consensus.validators.{BlockHeaderError, BlockHeaderValid, BlockHeaderValidatorSkeleton}
 import io.iohk.ethereum.domain.BlockHeader
 import io.iohk.ethereum.utils.BlockchainConfig
 
-class AtomixRaftBlockHeaderValidator(blockchainConfig: BlockchainConfig)
-  extends BlockHeaderValidatorSkeleton(blockchainConfig) {
+class AtomixRaftBlockHeaderValidator(blockchainConfig: BlockchainConfig, consensusConfig: ConsensusConfig)
+  extends BlockHeaderValidatorSkeleton(blockchainConfig, consensusConfig) {
 
   protected def difficulty: DifficultyCalculator = AtomixRaftDifficulty
 

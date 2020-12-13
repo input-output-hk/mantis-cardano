@@ -861,6 +861,23 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     response.futureValue shouldEqual Right(GetAccountTransactionsResponse(expectedSent))
   }
 
+  it should "include signature and signer's public key in the response if the block is signed" in new TestSetup {
+    import Fixtures.Blocks._
+    val signedBlock = blockToRequest.sign(signingKey)
+    val pubKeyStr = ByteStringUtils.hash2string(crypto.pubKeyFromPrvKey(signingKey))
+    val signatureStr = ByteStringUtils.hash2string(signedBlock.header.signature.get.toBytes)
+
+
+    blockchain.save(signedBlock)
+
+    val request = BlockByBlockHashRequest(signedBlock.header.hash, fullTxs = false)
+    val response = Await.result(ethService.getByBlockHash(request), Duration.Inf).right.get
+
+    response.blockResponse shouldBe Some(BlockResponse(signedBlock))
+    response.blockResponse.get.signature shouldBe signatureStr
+    response.blockResponse.get.signer shouldBe pubKeyStr
+  }
+
   // NOTE TestSetup uses Ethash consensus; check `consensusConfig`.
   trait TestSetup extends MockFactory with EphemBlockchainTestSetup {
     val blockGenerator = mock[EthashBlockGenerator]

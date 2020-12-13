@@ -29,6 +29,7 @@ object BlockHeaderError {
   case object HeaderTimestampError extends BlockHeaderError
   case object HeaderDifficultyError extends BlockHeaderError
   case object HeaderGasUsedError extends BlockHeaderError
+  case object HeaderSignatureError extends BlockHeaderError
 
   sealed trait HeaderGasLimitError extends BlockHeaderError
   case class HeaderGasLimitErrorConst(constant: BigInt, gasLimit: BigInt) extends HeaderGasLimitError
