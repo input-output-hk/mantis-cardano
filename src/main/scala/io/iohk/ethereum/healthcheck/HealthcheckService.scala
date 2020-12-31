@@ -3,13 +3,18 @@ package io.iohk.ethereum.healthcheck
 import java.lang.management.ManagementFactory
 import java.util.concurrent.atomic.AtomicReference
 
+import akka.util.ByteString
 import com.google.common.eventbus.Subscribe
 import io.iohk.ethereum.eventbus.EventBus
-import io.iohk.ethereum.jsonrpc.EthService.{BlockByNumberRequest, BlockByNumberResponse}
+import io.iohk.ethereum.jsonrpc.EthService._
 import io.iohk.ethereum.jsonrpc.NetService.{PeerCountRequest, PeerCountResponse}
-import io.iohk.ethereum.jsonrpc.{EthService, JsonRpcHealthcheck, NetService}
+import io.iohk.ethereum.jsonrpc.{EthService, JsonRpcError, JsonRpcHealthcheck, NetService}
 import io.iohk.ethereum.ledger.LedgerBusEvent
 import io.iohk.ethereum.metrics.Metrics
+import io.iohk.ethereum.rlp
+import io.iohk.ethereum.rlp.RLPImplicitConversions._
+import io.iohk.ethereum.rlp.RLPImplicits._
+import io.iohk.ethereum.rlp.RLPList
 import io.iohk.ethereum.utils.events._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -103,6 +108,48 @@ class HealthcheckService(
     mapPendingBlockHCResult
   )
 
+  private def mapVmCallHCResult(result: CallResponse): HealthcheckResult.MapperResult = {
+    None -> Map.empty
+  }
+
+  private def mapVmCallHCError(error: JsonRpcError): HealthcheckResult.MapperResult = {
+    Some(error.message) -> Map("code" -> error.code.toString, "type" -> error.productPrefix)
+  }
+
+  private def mapVmCallHCException(ex: Throwable): HealthcheckResult.MapperResult = {
+    Some(ex.getMessage) -> Map("type" -> ex.getClass.getSimpleName)
+  }
+
+  // STOP op code
+  private val evmByteCode = ByteString("0x00")
+
+  /*
+  contract test3 {
+    function test() public pure returns (uint) {
+        return 0;
+    }
+  }
+  */
+  //scalastyle:off
+  private val ieleByteCode =
+    ByteString("0000003963026900067465737428296800010000660000340065000200618001640001660001f6000101660002620102f7026700000000660000f60000a165627a7a72305820e4fd512842080cbbea62d8abf7ffa5d385b4520fd9bd85bf2d496803299340ff0029")
+  //scalastyle:on
+
+  private val ieleData = ByteString(rlp.encode(RLPList(ieleByteCode, Seq.empty[ByteString])))
+
+  private def virtualMachineHC = {
+    val block = BlockParam.Latest
+    val data = if(config.isIeleVM) ieleData else evmByteCode
+    val tx = CallTx(from = None, to = None, gas = None, gasPrice = 0, value = 0, data = data)
+    JsonRpcHealthcheck(
+      "virtualMachine",
+      () ⇒ ethService.call(CallRequest(tx, block)),
+      mapVmCallHCResult,
+      mapVmCallHCError,
+      mapVmCallHCException
+    )
+  }
+
   def blockImportHC(): HealthcheckResult = {
     val description = "blockImportLatency"
 
@@ -148,9 +195,10 @@ class HealthcheckService(
     val earliestBlockF = earliestBlockHC()
     val latestBlockF = latestBlockHC()
     val pendingBlockF = pendingBlockHC()
+    val virtualMachineF = virtualMachineHC()
     val blockImportF = Future.successful(blockImportHC())
 
-    val allChecksF = List(listeningF, peerCountF, earliestBlockF, latestBlockF, pendingBlockF, blockImportF)
+    val allChecksF = List(listeningF, peerCountF, earliestBlockF, latestBlockF, pendingBlockF, virtualMachineF, blockImportF)
     val responseF = Future.sequence(allChecksF).map(HealthcheckResults)
 
     responseF.andThen {
